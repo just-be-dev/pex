@@ -149,10 +149,10 @@ describe("Token Normalizer", () => {
 
     test("does not inject $$ into explicit parens", () => {
       // Explicit parens prevent $$-injection
-      // If user writes (foo (bar)), they're being explicit about structure
+      // Parens around single identifiers with no args are simplified
       expectNormalized(
         "(foo (bar))",
-        "(foo (bar))"
+        "(foo bar)"
       );
 
       // Verify no SOURCE_REF tokens exist (all parens are explicit)
