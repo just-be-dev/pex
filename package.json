@@ -5,7 +5,8 @@
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
-    "@typescript/native-preview": "^7.0.0-dev.20260117.1"
+    "@typescript/native-preview": "^7.0.0-dev.20260117.1",
+    "oxlint": "^1.39.0"
   },
   "peerDependencies": {
     "typescript": "^5"

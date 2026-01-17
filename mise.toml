@@ -18,3 +18,7 @@ run = "tsgo --noEmit"
 [tasks.test]
 description = "Run tests with bun"
 run = "bun test"
+
+[tasks.lint]
+description = "Lint the project with oxlint"
+run = "oxlint ."

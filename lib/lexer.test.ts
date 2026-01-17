@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { tokenize, TokenType, LexerError, type Token } from "./lexer.ts";
+import { tokenize, TokenType, LexerError } from "./lexer.ts";
 
 describe("Lexer", () => {
   describe("Numbers", () => {
