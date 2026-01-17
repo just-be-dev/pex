@@ -183,27 +183,7 @@ export class Parser {
   // ============================================
 
   private parseExpression(): AST.Expression {
-    return this.parsePipeline();
-  }
-
-  private parsePipeline(): AST.Expression {
-    const startToken = this.peek();
-    const stages: AST.Expression[] = [this.parsePrimary()];
-
-    while (this.match(TokenType.PIPE)) {
-      stages.push(this.parsePrimary());
-    }
-
-    // If single stage, don't wrap in pipeline
-    if (stages.length === 1) {
-      return stages[0]!;
-    }
-
-    return {
-      type: "PipelineExpression",
-      stages,
-      span: this.makeSpan(startToken, this.previous()),
-    };
+    return this.parsePrimary();
   }
 
   private parsePrimary(): AST.Expression {
@@ -367,7 +347,6 @@ export class Parser {
     // Stop tokens - not an argument
     if (
       [
-        TokenType.PIPE,
         TokenType.RPAREN,
         TokenType.EOF,
         TokenType.EFFECT_IDENT,
@@ -376,7 +355,7 @@ export class Parser {
       return false;
     }
 
-    // Atoms or grouped expressions
+    // Atoms or grouped expressions (including SOURCE_REF)
     return (
       t === TokenType.NUMBER ||
       t === TokenType.STRING ||
@@ -384,6 +363,7 @@ export class Parser {
       t === TokenType.BOOLEAN ||
       t === TokenType.NULL ||
       t === TokenType.IDENTIFIER ||
+      t === TokenType.SOURCE_REF ||
       t === TokenType.LPAREN
     );
   }
@@ -443,6 +423,10 @@ export class Parser {
       return this.makeIdentifier(token);
     }
 
+    if (this.match(TokenType.SOURCE_REF)) {
+      return this.makeIdentifier(token);
+    }
+
     throw this.error(`Unexpected token: ${token.type}`, token);
   }
 
@@ -453,23 +437,27 @@ export class Parser {
   private makeIdentifier(token: Token): AST.Identifier {
     const name = String(token.value);
 
-    // Detect special identifiers: $, $$, $0, $1, etc.
-    const isPipelineRef = name === "$";
-    const isProgramInput = name === "$$";
-    const arrayIndexMatch = name.match(/^\$(\d+)$/);
-    const arrayIndex = arrayIndexMatch
-      ? parseInt(arrayIndexMatch[1]!, 10)
-      : undefined;
-    const isSourceRef =
-      isPipelineRef || isProgramInput || arrayIndex !== undefined;
+    // Handle SOURCE_REF tokens
+    if (token.type === TokenType.SOURCE_REF) {
+      const sourceToken = token as any; // SourceRefToken
+      return {
+        type: "Identifier",
+        name,
+        isSourceRef: true,
+        isPipelineRef: sourceToken.refType === 'pipeline',
+        isProgramInput: sourceToken.refType === 'program',
+        arrayIndex: sourceToken.arrayIndex,
+        span: this.makeSpan(token, token),
+      };
+    }
 
+    // Regular identifier - no special handling needed
     return {
       type: "Identifier",
       name,
-      isSourceRef,
-      isPipelineRef,
-      isProgramInput,
-      arrayIndex,
+      isSourceRef: false,
+      isPipelineRef: false,
+      isProgramInput: false,
       span: this.makeSpan(token, token),
     };
   }

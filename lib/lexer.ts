@@ -9,6 +9,7 @@ export enum TokenType {
   // Identifiers
   IDENTIFIER = "IDENTIFIER",
   EFFECT_IDENT = "EFFECT_IDENT", // identifier followed by colon, e.g., "let:", "fn:"
+  SOURCE_REF = "SOURCE_REF", // $, $$, $0, $1, etc.
 
   // Operators
   PIPE = "PIPE",           // |
@@ -27,6 +28,12 @@ export interface Token {
   line: number;
   column: number;
   raw: string;
+}
+
+export interface SourceRefToken extends Token {
+  type: TokenType.SOURCE_REF;
+  refType: 'pipeline' | 'program' | 'array';
+  arrayIndex?: number;
 }
 
 export class LexerError extends Error {
@@ -280,7 +287,7 @@ export class Lexer {
     };
   }
 
-  private readIdentifier(): Token {
+  private readIdentifier(): Token | SourceRefToken {
     const line = this.line;
     const column = this.column;
     let value = "";
@@ -291,6 +298,40 @@ export class Lexer {
     ) {
       value += this.peek();
       this.advance();
+    }
+
+    // Check for SOURCE_REF patterns: $, $$, $0, $1, etc.
+    if (value === "$") {
+      return {
+        type: TokenType.SOURCE_REF,
+        value: "$",
+        refType: 'pipeline',
+        line,
+        column,
+        raw: "$",
+      };
+    }
+    if (value === "$$") {
+      return {
+        type: TokenType.SOURCE_REF,
+        value: "$$",
+        refType: 'program',
+        line,
+        column,
+        raw: "$$",
+      };
+    }
+    const arrayMatch = value.match(/^\$(\d+)$/);
+    if (arrayMatch) {
+      return {
+        type: TokenType.SOURCE_REF,
+        value,
+        refType: 'array',
+        arrayIndex: parseInt(arrayMatch[1]!, 10),
+        line,
+        column,
+        raw: value,
+      };
     }
 
     // Check if followed by colon (effect name pattern)

@@ -152,22 +152,26 @@ describe("Lexer", () => {
       expect(tokens[0]?.value).toBe("var123");
     });
 
-    test("tokenizes $ as identifier", () => {
+    test("tokenizes $ as SOURCE_REF", () => {
       const tokens = tokenize("$");
-      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.type).toBe(TokenType.SOURCE_REF);
       expect(tokens[0]?.value).toBe("$");
+      expect((tokens[0] as any).refType).toBe('pipeline');
     });
 
-    test("tokenizes $$ as identifier", () => {
+    test("tokenizes $$ as SOURCE_REF", () => {
       const tokens = tokenize("$$");
-      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.type).toBe(TokenType.SOURCE_REF);
       expect(tokens[0]?.value).toBe("$$");
+      expect((tokens[0] as any).refType).toBe('program');
     });
 
-    test("tokenizes $0 as identifier", () => {
+    test("tokenizes $0 as SOURCE_REF", () => {
       const tokens = tokenize("$0");
-      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.type).toBe(TokenType.SOURCE_REF);
       expect(tokens[0]?.value).toBe("$0");
+      expect((tokens[0] as any).refType).toBe('array');
+      expect((tokens[0] as any).arrayIndex).toBe(0);
     });
   });
 
