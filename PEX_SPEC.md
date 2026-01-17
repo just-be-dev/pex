@@ -48,16 +48,72 @@ email | lower | trim
 
 ### Special Forms
 
+Special forms use a `:` postfix to indicate they **do not produce output** - they only have side effects (bindings, logging, assertions, etc.).
+
 ```lisp
-;; Variable binding
-let NAME VALUE;
+;; Variable binding (no output)
+let: NAME VALUE
 
-;; Function definition
-fn NAME (PARAMS) BODY;
+;; Function definition (no output)
+fn: NAME (PARAMS) BODY
 
-;; Conditional
+;; Logging/debugging (no output)
+print: EXPRESSION
+debug: EXPRESSION
+assert: EXPRESSION
+
+;; Regular expressions (produce output)
 if CONDITION TRUE_EXPR FALSE_EXPR
+lower | trim
 ```
+
+**The `:` postfix means**: "This form doesn't contribute to the program's output."
+
+---
+
+## Program Structure
+
+A Pex program consists of:
+
+1. **Special forms** (optional) - Statements with `:` postfix that don't produce output
+2. **Expression** (required) - The computation that produces the program result
+
+**Special forms** include:
+- `let:` - Variable bindings
+- `fn:` - Function definitions
+- `print:` - Console output (for debugging)
+- `debug:` - Debug logging
+- `assert:` - Runtime assertions
+
+**Expressions** are everything else - they compute and return values.
+
+### Key Distinction
+
+```lisp
+;; Special forms (: postfix) - side effects only, no output
+let: x 10
+fn: double (x) * x 2
+print: "Processing..."
+
+;; Expression - produces the program output
+double $$
+```
+
+The semicolon (`;`) is purely optional syntactic sugar and has no semantic meaning.
+
+### Example
+
+```lisp
+;; Setup (special forms)
+let: TAX_RATE 0.08
+fn: add_tax (price) * price (+ 1 TAX_RATE)
+print: "Tax calculator ready"
+
+;; Computation (expression - this is the output)
+add_tax $$
+```
+
+Only the final expression contributes to the program's output. All special forms are for side effects.
 
 ---
 
@@ -145,7 +201,7 @@ Pex syntax desugars to pure S-expressions early in compilation:
 
 ```lisp
 ;; Source
-let x 10;
+let: x 10
 x | double | add_ten
 
 ;; Desugared to canonical S-expressions
@@ -171,9 +227,11 @@ if $$ "yes" "no"          →  (if $$ "yes" "no")
 split " " | (len $)       →  (len (split " "))
 ```
 
-**Semicolons separate top-level statements:**
+**Special forms desugar to S-expressions:**
 ```
-expr1; expr2; expr3
+let: x 10   →  (let x 10)
+fn: f (x) body  →  (fn f (params x) body)
+print: "hello"  →  (print "hello")
 ```
 
 ---
@@ -259,24 +317,85 @@ not a
 
 ---
 
+## Debugging and Logging
+
+Special forms with `:` postfix can be used for debugging without affecting the output:
+
+```lisp
+;; Print to console
+print: "Processing started"
+print: (join "Input length: " (len $$))
+
+;; Debug output (more detailed)
+debug: $$
+debug: (join "Variables: x=" x " y=" y)
+
+;; Runtime assertions
+assert: (!= $$ null)
+assert: (> (len $$) 0)
+```
+
+### Example with Debugging
+
+```lisp
+fn: process_email (email)
+  print: "Normalizing email"
+  let: normalized (lower email | trim)
+  debug: normalized
+  
+  assert: (> (len normalized) 0)
+  
+  print: "Removing plus aliases"
+  let: cleaned (replace normalized /\+.*@/ "@")
+  debug: cleaned
+  
+  cleaned
+
+;; The output is just the cleaned email
+;; All print/debug/assert forms don't contribute to output
+process_email $$
+```
+
+### Conditional Debugging
+
+```lisp
+fn: safe_process (data)
+  let: is_dev (== ENV "development")
+  
+  ;; Only debug in development
+  if is_dev
+    (print: "Development mode")
+    null
+  
+  let: result (transform data)
+  
+  if is_dev
+    (debug: result)
+    null
+  
+  result
+```
+
+---
+
 ## Function Definitions
 
 ```lisp
 ;; Basic function
-fn double (x) * x 2;
+fn: double (x) * x 2
 
 ;; Using in expression
 double 5    ;; → 10
 
 ;; Multi-step function
-fn normalize_email (email)
-  let lowered (lower email);
-  let trimmed (trim lowered);
-  trimmed;
+fn: normalize_email (email)
+  let: lowered (lower email)
+  let: trimmed (trim lowered)
+  trimmed
 
 ;; With pipes
-fn clean (email)
-  email | lower | trim | replace /\+.*@/ "@";
+fn: clean (email)
+  email | lower | trim | replace /\+.*@/ "@"
 ```
 
 ---
@@ -285,18 +404,18 @@ fn clean (email)
 
 ```lisp
 ;; Constants
-let TAX_RATE 0.08;
-let PI 3.14159;
+let: TAX_RATE 0.08
+let: PI 3.14159
 
 ;; Using constants
-fn add_tax (price)
-  * price (+ 1 TAX_RATE);
+fn: add_tax (price)
+  * price (+ 1 TAX_RATE)
 
 ;; Local bindings in functions
-fn process (x)
-  let doubled (* x 2);
-  let squared (* doubled doubled);
-  + squared 10;
+fn: process (x)
+  let: doubled (* x 2)
+  let: squared (* doubled doubled)
+  + squared 10
 ```
 
 ---
@@ -308,16 +427,16 @@ Modules are `.pex` files containing definitions:
 ```lisp
 ;; email.pex
 
-let EMAIL_REGEX /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+let: EMAIL_REGEX /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-fn normalize (email)
-  lower email | trim;
+fn: normalize (email)
+  lower email | trim
 
-fn extract_domain (email)
-  split email "@" | get 1 "";
+fn: extract_domain (email)
+  split email "@" | get 1 ""
 
-fn is_valid (email)
-  != (match email EMAIL_REGEX) null;
+fn: is_valid (email)
+  != (match email EMAIL_REGEX) null
 ```
 
 **Using modules:**
@@ -342,12 +461,15 @@ lenses:
 ## Grammar
 
 ```ebnf
-program    := statement*
+program    := special_form* expression
 
-statement  := definition | expression
-
-definition := 'let' IDENTIFIER expression ';'
-           |  'fn' IDENTIFIER '(' params ')' expression ';'
+special_form := 
+           | 'let:' IDENTIFIER expression
+           | 'fn:' IDENTIFIER '(' params ')' expression
+           | 'print:' expression
+           | 'debug:' expression
+           | 'assert:' expression
+           | IDENTIFIER ':' expression
 
 params     := IDENTIFIER*
 
@@ -372,6 +494,8 @@ atom       := NUMBER
            |  IDENTIFIER
 ```
 
+**Note:** Special forms (with `:` postfix) don't produce output. Only the final expression produces the program result.
+
 ---
 
 ## Compilation Pipeline
@@ -379,7 +503,7 @@ atom       := NUMBER
 ```
 Source Code (.pex)
     ↓
-Tokenize (recognize |, ;, etc.)
+Tokenize (recognize |, :, etc.)
     ↓
 Parse (build AST with sugar)
     ↓
@@ -390,7 +514,11 @@ Compile (generate bytecode)
 Bytecode (.pexb)
 ```
 
-**Key invariant:** After desugaring, only canonical S-expressions exist. The compiler, VM, and all tools only understand pure S-expressions.
+**Key invariants:** 
+- After desugaring, only canonical S-expressions exist
+- Special forms (`:` postfix) are compiled as side effects
+- Only the final expression contributes to program output
+- The compiler, VM, and all tools only understand pure S-expressions
 
 ---
 
@@ -415,14 +543,14 @@ lower | if (> (len $) 5) $ "short"
 ### With Definitions
 
 ```lisp
-let FREEZING 32;
-let RATIO 1.8;
+let: FREEZING 32
+let: RATIO 1.8
 
-fn c_to_f (c)
-  + (* c RATIO) FREEZING;
+fn: c_to_f (c)
+  + (* c RATIO) FREEZING
 
-fn f_to_c (f)
-  / (- f FREEZING) RATIO;
+fn: f_to_c (f)
+  / (- f FREEZING) RATIO
 
 ;; Use it
 100 | c_to_f    ;; → 212
@@ -433,24 +561,24 @@ fn f_to_c (f)
 ```lisp
 ;; text-utils.pex
 
-let WORD_SEP /[\s-_]+/;
+let: WORD_SEP /[\s-_]+/
 
-fn words (text)
-  split text WORD_SEP;
+fn: words (text)
+  split text WORD_SEP
 
-fn word_count (text)
-  len (words text);
+fn: word_count (text)
+  len (words text)
 
-fn acronym (text)
-  let word_list (words text);
-  let initials (map word_list (fn (w) substring w 0 1));
-  upper (join initials "");
+fn: acronym (text)
+  let: word_list (words text)
+  let: initials (map word_list (fn (w) substring w 0 1))
+  upper (join initials "")
 
-fn title_case (text)
-  let word_list (words text);
-  let capitalized (map word_list (fn (w) 
-    join (upper (substring w 0 1)) (lower (substring w 1))));
-  join capitalized " ";
+fn: title_case (text)
+  let: word_list (words text)
+  let: capitalized (map word_list (fn (w) 
+    join (upper (substring w 0 1)) (lower (substring w 1))))
+  join capitalized " "
 ```
 
 ### Email Processing Pipeline
@@ -458,23 +586,23 @@ fn title_case (text)
 ```lisp
 ;; email-utils.pex
 
-let EMAIL_REGEX /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-let PLUS_PATTERN /\+.*@/;
+let: EMAIL_REGEX /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+let: PLUS_PATTERN /\+.*@/
 
-fn normalize (email)
-  lower email | trim;
+fn: normalize (email)
+  lower email | trim
 
-fn remove_plus (email)
-  replace email PLUS_PATTERN "@";
+fn: remove_plus (email)
+  replace email PLUS_PATTERN "@"
 
-fn mask (email)
-  let parts (split email "@");
-  let local (get parts 0);
-  let domain (get parts 1);
-  join (substring local 0 2) "***@" domain;
+fn: mask (email)
+  let: parts (split email "@")
+  let: local (get parts 0)
+  let: domain (get parts 1)
+  join (substring local 0 2) "***@" domain
 
-fn safe_email (email)
-  normalize email | remove_plus | mask;
+fn: safe_email (email)
+  normalize email | remove_plus | mask
 
 ;; Usage in transform
 ;; Input gets auto-injected as $$:
@@ -502,13 +630,13 @@ lenses:
       target: email_clean
       expr: lower | trim
 
-  # With definitions
+  # With special forms
   - transform:
       source: temperature_c
       target: temperature_f
       expr: |
-        let FREEZING 32;
-        fn c_to_f (c) + (* c 1.8) FREEZING;
+        let: FREEZING 32
+        fn: c_to_f (c) + (* c 1.8) FREEZING
         c_to_f $$
 
   # Multi-source (using $0, $1 which reference $$)
@@ -532,6 +660,17 @@ lenses:
           if (> (len $$) 100)
             (get $ 0 10)
             $
+  
+  # With debugging
+  - transform:
+      source: data
+      target: result
+      expr: |
+        print: "Processing data"
+        debug: $$
+        let: cleaned (trim $$)
+        print: "Cleaned"
+        upper cleaned
 ```
 
 ---
@@ -611,6 +750,7 @@ lenses:
 5. **Implicit when safe** - Auto-inject source, but allow explicit control
 6. **First-class functions** - Functions are values
 7. **Compiled to bytecode** - Fast execution, compact storage
+8. **Side effects are explicit** - `:` postfix marks forms that don't produce output
 
 ---
 
@@ -753,41 +893,41 @@ modules/
 ;; user-transform.pex
 ;; Transforms user data between API formats
 
-let API_V1_DOMAIN "api.example.com";
-let API_V2_DOMAIN "api-v2.example.com";
+let: API_V1_DOMAIN "api.example.com"
+let: API_V2_DOMAIN "api-v2.example.com"
 
-fn normalize_email (email)
-  lower email | trim | replace /\+.*@/ "@";
+fn: normalize_email (email)
+  lower email | trim | replace /\+.*@/ "@"
 
-fn format_phone (phone)
-  let digits (replace phone /\D/g "");
+fn: format_phone (phone)
+  let: digits (replace phone /\D/g "")
   if (== (len digits) 10)
     (join "(" (substring digits 0 3) ") " 
           (substring digits 3 6) "-" 
           (substring digits 6 10))
-    phone;
+    phone
 
-fn full_name (first last middle)
+fn: full_name (first last middle)
   if (> (len middle) 0)
     (join first " " middle " " last | trim)
-    (join first " " last | trim);
+    (join first " " last | trim)
 
 ;; Main transformation
 ;; Takes user_data object and transforms it
-fn transform_user (user_data)
-  let email (normalize_email (get user_data "email" ""));
-  let phone (format_phone (get user_data "phone" ""));
-  let name (full_name 
+fn: transform_user (user_data)
+  let: email (normalize_email (get user_data "email" ""))
+  let: phone (format_phone (get user_data "phone" ""))
+  let: name (full_name 
     (get user_data "first_name" "")
     (get user_data "last_name" "")
-    (get user_data "middle_name" ""));
+    (get user_data "middle_name" ""))
   
   ;; Return transformed object
   {
     emailAddress: email,
     phoneNumber: phone,
     displayName: name
-  };
+  }
 ```
 
 Usage in lens configuration:
@@ -824,12 +964,14 @@ NULL       = "null" ;
 IDENTIFIER = (LETTER | "_" | "$") (LETTER | DIGIT | "_" | "$")* ;
 
 (* Syntactic Grammar *)
-program    = statement* ;
+program    = special_form* expression ;
 
-statement  = definition | expression ;
-
-definition = "let" IDENTIFIER expression ";"
-           | "fn" IDENTIFIER "(" params ")" expression ";" ;
+special_form = "let:" IDENTIFIER expression
+             | "fn:" IDENTIFIER "(" params ")" expression
+             | "print:" expression
+             | "debug:" expression
+             | "assert:" expression
+             | IDENTIFIER ":" expression ;
 
 params     = [IDENTIFIER ("," IDENTIFIER)*] ;
 
