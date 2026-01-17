@@ -43,8 +43,9 @@ export function normalizeTokens(tokens: Token[]): Token[] {
 /**
  * Simplify redundant nested parens: ( ( ... ) ) → ( ... )
  * If a paren group contains only another paren group, unwrap it
+ * Also removes parens around single identifiers when nested (not at top level)
  */
-function simplifyRedundantParens(tokens: Token[]): Token[] {
+function simplifyRedundantParens(tokens: Token[], isTopLevel: boolean = true): Token[] {
   const result: Token[] = [];
   let i = 0;
 
@@ -55,8 +56,8 @@ function simplifyRedundantParens(tokens: Token[]): Token[] {
       // Extract paren group contents
       const { endIndex, contents } = extractParenGroup(tokens, i);
 
-      // Recursively simplify the contents
-      const simplifiedContents = simplifyRedundantParens(contents);
+      // Recursively simplify the contents (not top level anymore)
+      const simplifiedContents = simplifyRedundantParens(contents, false);
 
       // Check if contents are ONLY another paren group (no other tokens)
       // This means: contents = [LPAREN, ..., RPAREN] with matching parens
@@ -67,6 +68,12 @@ function simplifyRedundantParens(tokens: Token[]): Token[] {
         areMatchingParens(simplifiedContents, 0, simplifiedContents.length - 1)
       ) {
         // Unwrap: remove outer parens, keep inner ones
+        result.push(...simplifiedContents);
+      }
+      // NEW: Check if contents are a single token (no arguments)
+      // If not at top level, unwrap single-token paren groups
+      else if (!isTopLevel && isSingleTokenGroup(simplifiedContents)) {
+        // Unwrap: just push the single token without parens
         result.push(...simplifiedContents);
       } else {
         // Keep the parens
@@ -83,6 +90,17 @@ function simplifyRedundantParens(tokens: Token[]): Token[] {
   }
 
   return result;
+}
+
+/**
+ * Check if a token group is a single token (no parens, just one token)
+ */
+function isSingleTokenGroup(tokens: Token[]): boolean {
+  // Filter out paren tokens and whitespace if any
+  const nonParenTokens = tokens.filter(
+    t => t.type !== TokenType.LPAREN && t.type !== TokenType.RPAREN
+  );
+  return nonParenTokens.length === 1;
 }
 
 /**
