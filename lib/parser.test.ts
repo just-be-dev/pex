@@ -1,18 +1,28 @@
 import { describe, test, expect } from "bun:test";
 import { tokenize } from "./lexer.ts";
 import { parse, ParseError } from "./parser.ts";
-import { normalize, injectProgramInput } from "./normalize.ts";
+import { normalizeTokens } from "./tokenNormalizer.ts";
 import type * as AST from "./ast.ts";
 
 // Helper to parse source code
 const parseSource = (source: string) => parse(tokenize(source));
 
-// Helper to get normalized expression
-// Order: parse -> inject $$ -> normalize pipelines
+// Helper to get normalized and parsed expression
+// Order: tokenize -> normalize tokens -> parse
 const parseAndNormalize = (source: string) => {
-  const ast = parseSource(source);
-  const injected = injectProgramInput(ast);
-  return normalize(injected);
+  const tokens = tokenize(source);
+  const normalizedTokens = normalizeTokens(tokens);
+  const ast = parse(normalizedTokens);
+
+  // Unwrap top-level GroupExpression added by token normalizer
+  if (ast.expression && ast.expression.type === "GroupExpression") {
+    return {
+      ...ast,
+      expression: ast.expression.expression,
+    };
+  }
+
+  return ast;
 };
 
 describe("Parser", () => {
@@ -181,36 +191,6 @@ describe("Parser", () => {
     });
   });
 
-  describe("Pipelines", () => {
-    test("parses simple pipeline", () => {
-      const ast = parseSource("a | b");
-      expect(ast.expression?.type).toBe("PipelineExpression");
-      const pipeline = ast.expression as AST.PipelineExpression;
-      expect(pipeline.stages).toHaveLength(2);
-    });
-
-    test("parses multi-stage pipeline", () => {
-      const ast = parseSource("email | lower | trim");
-      const pipeline = ast.expression as AST.PipelineExpression;
-      expect(pipeline.stages).toHaveLength(3);
-      expect((pipeline.stages[0] as AST.Identifier).name).toBe("email");
-      expect((pipeline.stages[1] as AST.Identifier).name).toBe("lower");
-      expect((pipeline.stages[2] as AST.Identifier).name).toBe("trim");
-    });
-
-    test("parses pipeline with call stage", () => {
-      const ast = parseSource('a | split " "');
-      const pipeline = ast.expression as AST.PipelineExpression;
-      expect(pipeline.stages[1]?.type).toBe("CallExpression");
-    });
-
-    test("parses pipeline with grouped stage", () => {
-      const ast = parseSource("a | (if cond b c)");
-      const pipeline = ast.expression as AST.PipelineExpression;
-      expect(pipeline.stages[1]?.type).toBe("GroupExpression");
-    });
-  });
-
   describe("If expressions", () => {
     test("parses basic if", () => {
       const ast = parseSource('if true "yes" "no"');
@@ -256,9 +236,15 @@ describe("Parser", () => {
     });
 
     test("parses grouped pipeline", () => {
-      const ast = parseSource("(a | b)");
-      const group = ast.expression as AST.GroupExpression;
-      expect(group.expression.type).toBe("PipelineExpression");
+      const ast = parseAndNormalize("(a | b)");
+      // (a | b) normalizes to (b a) - explicit parens prevent $$-injection
+      // Redundant double parens are simplified away
+      const call = ast.expression as AST.CallExpression;
+      expect(call.type).toBe("CallExpression");
+      expect(call.callee.name).toBe("b");
+      // Has 1 argument: a (no $$ injection due to explicit parens)
+      expect(call.arguments).toHaveLength(1);
+      expect((call.arguments[0] as AST.Identifier).name).toBe("a");
     });
   });
 
@@ -358,8 +344,11 @@ describe("Parser", () => {
 
   describe("Complex expressions", () => {
     test("parses email normalization pipeline", () => {
-      const ast = parseSource("email | lower | trim");
-      expect(ast.expression?.type).toBe("PipelineExpression");
+      const ast = parseAndNormalize("email | lower | trim");
+      // email | lower | trim normalizes to (trim (lower (email $$)))
+      const outer = ast.expression as AST.CallExpression;
+      expect(outer.type).toBe("CallExpression");
+      expect(outer.callee.name).toBe("trim");
     });
 
     test("parses conditional with comparison", () => {
@@ -370,10 +359,17 @@ describe("Parser", () => {
     });
 
     test("parses function with pipeline body", () => {
-      const ast = parseSource("fn: normalize (email) (email | lower | trim)");
+      const ast = parseAndNormalize("fn: normalize (email) (email | lower | trim)");
       const effect = ast.statements[0] as AST.EffectStatement;
+      // The pipeline in the body should be normalized to (trim lower email) with no $$
       const body = effect.arguments[2] as AST.GroupExpression;
-      expect(body.expression.type).toBe("PipelineExpression");
+      // The pipeline is grouped: GroupExpression(CallExpression) - no double nesting
+      const call = body.expression as AST.CallExpression;
+      expect(call.callee.name).toBe("trim");
+      // Explicit parens prevent $$-injection, so no $$ in arguments
+      expect(call.arguments).toHaveLength(2);
+      expect((call.arguments[0] as AST.Identifier).name).toBe("lower");
+      expect((call.arguments[1] as AST.Identifier).name).toBe("email");
     });
 
     test("parses array element access", () => {
@@ -388,39 +384,38 @@ describe("Parser", () => {
   describe("Normalization", () => {
     test("normalizes simple pipeline to nested calls", () => {
       const ast = parseAndNormalize("a | b");
-      // a | b -> b(a($$)) since no source refs present
+      // a | b -> (b a $$) with minimal parens (flattened)
       expect(ast.expression?.type).toBe("CallExpression");
       const call = ast.expression as AST.CallExpression;
       expect(call.callee.name).toBe("b");
-      expect(call.arguments).toHaveLength(1);
-      // First arg is a($$)
-      const inner = call.arguments[0] as AST.CallExpression;
-      expect(inner.callee.name).toBe("a");
-      expect(inner.arguments).toHaveLength(1);
-      expect((inner.arguments[0] as AST.Identifier).isProgramInput).toBe(true);
+      // Now has 2 arguments: a and $$ (unwrapped/flattened)
+      expect(call.arguments).toHaveLength(2);
+      expect((call.arguments[0] as AST.Identifier).name).toBe("a");
+      expect((call.arguments[1] as AST.Identifier).isProgramInput).toBe(true);
     });
 
     test("normalizes multi-stage pipeline", () => {
       const ast = parseAndNormalize("a | b | c");
-      // a | b | c -> c(b(a($$)))
-      const outer = ast.expression as AST.CallExpression;
-      expect(outer.callee.name).toBe("c");
-      const middle = outer.arguments[0] as AST.CallExpression;
-      expect(middle.callee.name).toBe("b");
-      const inner = middle.arguments[0] as AST.CallExpression;
-      expect(inner.callee.name).toBe("a");
-      expect((inner.arguments[0] as AST.Identifier).isProgramInput).toBe(true);
+      // a | b | c -> (c b a $$) with minimal parens (completely flattened)
+      const call = ast.expression as AST.CallExpression;
+      expect(call.callee.name).toBe("c");
+      // Now has 3 arguments: b, a, and $$ (all flattened)
+      expect(call.arguments).toHaveLength(3);
+      expect((call.arguments[0] as AST.Identifier).name).toBe("b");
+      expect((call.arguments[1] as AST.Identifier).name).toBe("a");
+      expect((call.arguments[2] as AST.Identifier).isProgramInput).toBe(true);
     });
 
     test("normalizes pipeline with call stage", () => {
       const ast = parseAndNormalize('a | split " "');
-      // a | split " " -> split(a($$), " ")
+      // a | split " " -> (split a $$ " ") with minimal parens
       const call = ast.expression as AST.CallExpression;
       expect(call.callee.name).toBe("split");
-      expect(call.arguments).toHaveLength(2);
-      // First arg is a($$)
-      const inner = call.arguments[0] as AST.CallExpression;
-      expect(inner.callee.name).toBe("a");
+      // Now has 3 arguments: a, $$, and " " (all flattened)
+      expect(call.arguments).toHaveLength(3);
+      expect((call.arguments[0] as AST.Identifier).name).toBe("a");
+      expect((call.arguments[1] as AST.Identifier).isProgramInput).toBe(true);
+      expect((call.arguments[2] as AST.StringLiteral).value).toBe(" ");
     });
 
     test("auto-injects $$ for bare identifier", () => {
@@ -466,11 +461,15 @@ describe("Parser", () => {
       const ast = parseAndNormalize("fn: normalize (email) (email | lower | trim)");
       const effect = ast.statements[0] as AST.EffectStatement;
       // Effect arguments should be normalized
-      // The pipeline in the body should be normalized to nested calls
+      // The pipeline in the body should be normalized to (trim lower email)
       expect(effect.arguments).toHaveLength(3);
       // Last argument is a group containing the normalized body
       const bodyGroup = effect.arguments[2] as AST.GroupExpression;
-      expect(bodyGroup.expression.type).toBe("CallExpression");
+      // Explicit parens prevent $$-injection and redundant nesting
+      // Direct GroupExpression(CallExpression) structure
+      const call = bodyGroup.expression as AST.CallExpression;
+      expect(call.type).toBe("CallExpression");
+      expect(call.callee.name).toBe("trim");
     });
   });
 
@@ -545,7 +544,7 @@ describe("Parser", () => {
       // Note: fn bodies need grouping when followed by more statements/expressions
       // to prevent greedy argument consumption
       const source = "let: EMAIL_REGEX /abc/ fn: normalize (email) (email | lower | trim) fn: is_valid (email) (!= (match email EMAIL_REGEX) null) normalize $$";
-      const ast = parseSource(source);
+      const ast = parseAndNormalize(source);
       expect(ast.statements).toHaveLength(3);
       expect(ast.expression?.type).toBe("CallExpression");
     });

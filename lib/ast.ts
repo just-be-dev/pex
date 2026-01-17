@@ -78,12 +78,6 @@ export interface CallExpression extends BaseNode {
   arguments: Expression[];
 }
 
-// Represents pipeline BEFORE desugaring: `a | b | c`
-export interface PipelineExpression extends BaseNode {
-  type: "PipelineExpression";
-  stages: Expression[]; // [a, b, c] for `a | b | c`
-}
-
 // Represents conditional: `if condition thenExpr elseExpr`
 export interface IfExpression extends BaseNode {
   type: "IfExpression";
@@ -107,7 +101,6 @@ export type Expression =
   | NullLiteral
   | Identifier
   | CallExpression
-  | PipelineExpression
   | IfExpression
   | GroupExpression;
 
@@ -151,7 +144,6 @@ export function isExpression(node: ASTNode): node is Expression {
     "NullLiteral",
     "Identifier",
     "CallExpression",
-    "PipelineExpression",
     "IfExpression",
     "GroupExpression",
   ].includes(node.type);
