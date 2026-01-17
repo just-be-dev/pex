@@ -170,14 +170,16 @@ describe("Lexer", () => {
   });
 
   describe("Keywords", () => {
-    test("tokenizes let", () => {
+    test("tokenizes let as identifier", () => {
       const tokens = tokenize("let");
-      expect(tokens[0]?.type).toBe(TokenType.LET);
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("let");
     });
 
-    test("tokenizes fn", () => {
+    test("tokenizes fn as identifier", () => {
       const tokens = tokenize("fn");
-      expect(tokens[0]?.type).toBe(TokenType.FN);
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("fn");
     });
 
     test("tokenizes if", () => {
@@ -297,25 +299,27 @@ describe("Lexer", () => {
       expect(tokens[2]?.value).toBe(" ");
     });
 
-    test("tokenizes let statement", () => {
-      const tokens = tokenize("let x 10;");
-      expect(tokens[0]?.type).toBe(TokenType.LET);
-      expect(tokens[1]?.value).toBe("x");
-      expect(tokens[2]?.value).toBe(10);
-      expect(tokens[3]?.type).toBe(TokenType.SEMICOLON);
+    test("tokenizes let effect", () => {
+      const tokens = tokenize("let: x 10");
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("let");
+      expect(tokens[1]?.type).toBe(TokenType.COLON);
+      expect(tokens[2]?.value).toBe("x");
+      expect(tokens[3]?.value).toBe(10);
     });
 
     test("tokenizes function definition", () => {
-      const tokens = tokenize("fn double (x) * x 2;");
-      expect(tokens[0]?.type).toBe(TokenType.FN);
-      expect(tokens[1]?.value).toBe("double");
-      expect(tokens[2]?.type).toBe(TokenType.LPAREN);
-      expect(tokens[3]?.value).toBe("x");
-      expect(tokens[4]?.type).toBe(TokenType.RPAREN);
-      expect(tokens[5]?.type).toBe(TokenType.STAR);
-      expect(tokens[6]?.value).toBe("x");
-      expect(tokens[7]?.value).toBe(2);
-      expect(tokens[8]?.type).toBe(TokenType.SEMICOLON);
+      const tokens = tokenize("fn: double (x) * x 2");
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("fn");
+      expect(tokens[1]?.type).toBe(TokenType.COLON);
+      expect(tokens[2]?.value).toBe("double");
+      expect(tokens[3]?.type).toBe(TokenType.LPAREN);
+      expect(tokens[4]?.value).toBe("x");
+      expect(tokens[5]?.type).toBe(TokenType.RPAREN);
+      expect(tokens[6]?.type).toBe(TokenType.STAR);
+      expect(tokens[7]?.value).toBe("x");
+      expect(tokens[8]?.value).toBe(2);
     });
 
     test("tokenizes conditional", () => {
@@ -339,14 +343,15 @@ describe("Lexer", () => {
     });
 
     test("tokenizes complex email normalization", () => {
-      const source = "let EMAIL_REGEX /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nfn normalize (email) lower email | trim;";
+      const source = "let: EMAIL_REGEX /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/  fn: normalize (email) lower email | trim";
       const tokens = tokenize(source);
 
       // Verify key tokens exist
-      expect(tokens.find(t => t.type === TokenType.LET)).toBeDefined();
+      expect(tokens.find(t => t.value === "let")).toBeDefined();
+      expect(tokens.find(t => t.type === TokenType.COLON)).toBeDefined();
       expect(tokens.find(t => t.value === "EMAIL_REGEX")).toBeDefined();
       expect(tokens.find(t => t.type === TokenType.REGEX)).toBeDefined();
-      expect(tokens.find(t => t.type === TokenType.FN)).toBeDefined();
+      expect(tokens.find(t => t.value === "fn")).toBeDefined();
       expect(tokens.find(t => t.value === "normalize")).toBeDefined();
     });
   });

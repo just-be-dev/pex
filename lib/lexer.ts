@@ -9,14 +9,13 @@ export enum TokenType {
   // Identifiers
   IDENTIFIER = "IDENTIFIER",
 
-  // Keywords
-  LET = "LET",
-  FN = "FN",
+  // Keywords (only special expression forms, not effects)
   IF = "IF",
 
   // Operators
   PIPE = "PIPE",           // |
   SEMICOLON = "SEMICOLON", // ;
+  COLON = "COLON",         // :
   LPAREN = "LPAREN",       // (
   RPAREN = "RPAREN",       // )
   COMMA = "COMMA",         // ,
@@ -122,6 +121,9 @@ export class Lexer {
       case ";":
         this.advance();
         return { type: TokenType.SEMICOLON, value: ";", line, column, raw: ";" };
+      case ":":
+        this.advance();
+        return { type: TokenType.COLON, value: ":", line, column, raw: ":" };
       case "(":
         this.advance();
         return { type: TokenType.LPAREN, value: "(", line, column, raw: "(" };
@@ -210,22 +212,25 @@ export class Lexer {
 
       // Regex after these tokens
       if (!lastToken ||
-          lastToken.type === TokenType.LET ||
-          lastToken.type === TokenType.FN ||
           lastToken.type === TokenType.IF ||
           lastToken.type === TokenType.LPAREN ||
           lastToken.type === TokenType.PIPE ||
           lastToken.type === TokenType.COMMA ||
-          lastToken.type === TokenType.SEMICOLON) {
+          lastToken.type === TokenType.SEMICOLON ||
+          lastToken.type === TokenType.COLON) {
         return this.readRegex();
       }
 
       // After identifier, check if it's in a context where regex is expected
       if (lastToken.type === TokenType.IDENTIFIER) {
-        // After "let VARNAME /regex/" pattern
-        if (secondLastToken?.type === TokenType.LET ||
-            secondLastToken?.type === TokenType.FN ||
-            secondLastToken?.type === TokenType.COMMA ||
+        const thirdLastToken = this.tokens[this.tokens.length - 3];
+        // After "IDENTIFIER COLON VARNAME /regex/" pattern (effect with value)
+        if (secondLastToken?.type === TokenType.COLON &&
+            thirdLastToken?.type === TokenType.IDENTIFIER) {
+          return this.readRegex();
+        }
+        // After comma or lparen (function arguments)
+        if (secondLastToken?.type === TokenType.COMMA ||
             secondLastToken?.type === TokenType.LPAREN) {
           return this.readRegex();
         }
@@ -431,12 +436,6 @@ export class Lexer {
     let tokenValue: string | boolean | null = value;
 
     switch (value) {
-      case "let":
-        type = TokenType.LET;
-        break;
-      case "fn":
-        type = TokenType.FN;
-        break;
       case "if":
         type = TokenType.IF;
         break;
