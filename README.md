@@ -1,15 +1,17 @@
 # pex
 
-To install dependencies:
+## Development
+
+This project uses [Mise](https://github.com/jdx/mise) to run scripts and manage dependencies.
+
+If you don't already have mise installed, you can install it using the following command:
 
 ```bash
-bun install
+curl https://mise.run | sh
 ```
 
-To run:
+Once mise is installed, you can run the following command to setup the project:
 
 ```bash
-bun run index.ts
+mise install
 ```
-
-This project was created using `bun init` in bun v1.3.6. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
