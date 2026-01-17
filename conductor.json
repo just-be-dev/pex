@@ -1,5 +1,5 @@
 {
   "scripts": {
-    "setup": "mise trust && mise install"
+    "setup": "mise trust $CONDUCTOR_WORKSPACE_PATH && mise install"
   }
 }
