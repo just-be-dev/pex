@@ -102,7 +102,9 @@ describe("Lexer", () => {
     test("distinguishes regex from division", () => {
       const tokens = tokenize("x / 2");
       expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
-      expect(tokens[1]?.type).toBe(TokenType.SLASH);
+      expect(tokens[0]?.value).toBe("x");
+      expect(tokens[1]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[1]?.value).toBe("/");
       expect(tokens[2]?.type).toBe(TokenType.NUMBER);
     });
 
@@ -169,40 +171,6 @@ describe("Lexer", () => {
     });
   });
 
-  describe("Keywords", () => {
-    test("tokenizes let as identifier", () => {
-      const tokens = tokenize("let");
-      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
-      expect(tokens[0]?.value).toBe("let");
-    });
-
-    test("tokenizes fn as identifier", () => {
-      const tokens = tokenize("fn");
-      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
-      expect(tokens[0]?.value).toBe("fn");
-    });
-
-    test("tokenizes if", () => {
-      const tokens = tokenize("if");
-      expect(tokens[0]?.type).toBe(TokenType.IF);
-    });
-
-    test("tokenizes and", () => {
-      const tokens = tokenize("and");
-      expect(tokens[0]?.type).toBe(TokenType.AND);
-    });
-
-    test("tokenizes or", () => {
-      const tokens = tokenize("or");
-      expect(tokens[0]?.type).toBe(TokenType.OR);
-    });
-
-    test("tokenizes not", () => {
-      const tokens = tokenize("not");
-      expect(tokens[0]?.type).toBe(TokenType.NOT);
-    });
-  });
-
   describe("Operators", () => {
     test("tokenizes pipe", () => {
       const tokens = tokenize("|");
@@ -225,40 +193,58 @@ describe("Lexer", () => {
       expect(tokens[0]?.type).toBe(TokenType.COMMA);
     });
 
-    test("tokenizes arithmetic operators", () => {
+    test("tokenizes arithmetic operators as identifiers", () => {
       const tokens = tokenize("+ - * / %");
-      expect(tokens[0]?.type).toBe(TokenType.PLUS);
-      expect(tokens[1]?.type).toBe(TokenType.MINUS);
-      expect(tokens[2]?.type).toBe(TokenType.STAR);
-      expect(tokens[3]?.type).toBe(TokenType.SLASH);
-      expect(tokens[4]?.type).toBe(TokenType.PERCENT);
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("+");
+      expect(tokens[1]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[1]?.value).toBe("-");
+      expect(tokens[2]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[2]?.value).toBe("*");
+      expect(tokens[3]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[3]?.value).toBe("/");
+      expect(tokens[4]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[4]?.value).toBe("%");
     });
 
-    test("tokenizes comparison operators", () => {
+    test("tokenizes comparison operators as identifiers", () => {
       const tokens = tokenize("== != < > <= >=");
-      expect(tokens[0]?.type).toBe(TokenType.EQ);
-      expect(tokens[1]?.type).toBe(TokenType.NE);
-      expect(tokens[2]?.type).toBe(TokenType.LT);
-      expect(tokens[3]?.type).toBe(TokenType.GT);
-      expect(tokens[4]?.type).toBe(TokenType.LE);
-      expect(tokens[5]?.type).toBe(TokenType.GE);
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("==");
+      expect(tokens[1]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[1]?.value).toBe("!=");
+      expect(tokens[2]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[2]?.value).toBe("<");
+      expect(tokens[3]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[3]?.value).toBe(">");
+      expect(tokens[4]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[4]?.value).toBe("<=");
+      expect(tokens[5]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[5]?.value).toBe(">=");
     });
 
-    test("tokenizes nullish coalescing", () => {
+    test("tokenizes nullish coalescing as identifier", () => {
       const tokens = tokenize("??");
-      expect(tokens[0]?.type).toBe(TokenType.NULLISH);
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("??");
     });
 
-    test("throws on single =", () => {
-      expect(() => tokenize("=")).toThrow(LexerError);
+    test("tokenizes single = as identifier", () => {
+      const tokens = tokenize("=");
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("=");
     });
 
-    test("throws on single !", () => {
-      expect(() => tokenize("!")).toThrow(LexerError);
+    test("tokenizes single ! as identifier", () => {
+      const tokens = tokenize("!");
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("!");
     });
 
-    test("throws on single ?", () => {
-      expect(() => tokenize("?")).toThrow(LexerError);
+    test("tokenizes single ? as identifier", () => {
+      const tokens = tokenize("?");
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("?");
     });
   });
 
@@ -301,32 +287,35 @@ describe("Lexer", () => {
 
     test("tokenizes let effect", () => {
       const tokens = tokenize("let: x 10");
-      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.type).toBe(TokenType.EFFECT_IDENT);
       expect(tokens[0]?.value).toBe("let");
-      expect(tokens[1]?.type).toBe(TokenType.COLON);
-      expect(tokens[2]?.value).toBe("x");
-      expect(tokens[3]?.value).toBe(10);
+      expect(tokens[0]?.raw).toBe("let:");
+      expect(tokens[1]?.value).toBe("x");
+      expect(tokens[2]?.value).toBe(10);
     });
 
     test("tokenizes function definition", () => {
       const tokens = tokenize("fn: double (x) * x 2");
-      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.type).toBe(TokenType.EFFECT_IDENT);
       expect(tokens[0]?.value).toBe("fn");
-      expect(tokens[1]?.type).toBe(TokenType.COLON);
-      expect(tokens[2]?.value).toBe("double");
-      expect(tokens[3]?.type).toBe(TokenType.LPAREN);
-      expect(tokens[4]?.value).toBe("x");
-      expect(tokens[5]?.type).toBe(TokenType.RPAREN);
-      expect(tokens[6]?.type).toBe(TokenType.STAR);
-      expect(tokens[7]?.value).toBe("x");
-      expect(tokens[8]?.value).toBe(2);
+      expect(tokens[0]?.raw).toBe("fn:");
+      expect(tokens[1]?.value).toBe("double");
+      expect(tokens[2]?.type).toBe(TokenType.LPAREN);
+      expect(tokens[3]?.value).toBe("x");
+      expect(tokens[4]?.type).toBe(TokenType.RPAREN);
+      expect(tokens[5]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[5]?.value).toBe("*");
+      expect(tokens[6]?.value).toBe("x");
+      expect(tokens[7]?.value).toBe(2);
     });
 
     test("tokenizes conditional", () => {
       const tokens = tokenize('if (> $ 10) "big" "small"');
-      expect(tokens[0]?.type).toBe(TokenType.IF);
+      expect(tokens[0]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[0]?.value).toBe("if");
       expect(tokens[1]?.type).toBe(TokenType.LPAREN);
-      expect(tokens[2]?.type).toBe(TokenType.GT);
+      expect(tokens[2]?.type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[2]?.value).toBe(">");
       expect(tokens[3]?.value).toBe("$");
       expect(tokens[4]?.value).toBe(10);
       expect(tokens[5]?.type).toBe(TokenType.RPAREN);
@@ -347,11 +336,10 @@ describe("Lexer", () => {
       const tokens = tokenize(source);
 
       // Verify key tokens exist
-      expect(tokens.find(t => t.value === "let")).toBeDefined();
-      expect(tokens.find(t => t.type === TokenType.COLON)).toBeDefined();
+      expect(tokens.find(t => t.type === TokenType.EFFECT_IDENT && t.value === "let")).toBeDefined();
       expect(tokens.find(t => t.value === "EMAIL_REGEX")).toBeDefined();
       expect(tokens.find(t => t.type === TokenType.REGEX)).toBeDefined();
-      expect(tokens.find(t => t.value === "fn")).toBeDefined();
+      expect(tokens.find(t => t.type === TokenType.EFFECT_IDENT && t.value === "fn")).toBeDefined();
       expect(tokens.find(t => t.value === "normalize")).toBeDefined();
     });
   });
@@ -378,22 +366,7 @@ describe("Lexer", () => {
   });
 
   describe("Whitespace handling", () => {
-    test("skips spaces", () => {
-      const tokens = tokenize("   42   ");
-      expect(tokens).toHaveLength(2); // number + EOF
-    });
-
-    test("skips tabs", () => {
-      const tokens = tokenize("\t\t42\t\t");
-      expect(tokens).toHaveLength(2);
-    });
-
-    test("skips newlines", () => {
-      const tokens = tokenize("\n\n42\n\n");
-      expect(tokens).toHaveLength(2);
-    });
-
-    test("handles mixed whitespace", () => {
+    test("skips whitespace", () => {
       const tokens = tokenize(" \t\n 42 \n\t ");
       expect(tokens).toHaveLength(2);
     });
@@ -402,7 +375,7 @@ describe("Lexer", () => {
   describe("Error handling", () => {
     test("provides line and column in error", () => {
       try {
-        tokenize("foo\nbar\n=");
+        tokenize("foo\nbar\n@");
         expect(true).toBe(false); // Should not reach here
       } catch (error) {
         expect(error).toBeInstanceOf(LexerError);
@@ -423,11 +396,6 @@ describe("Lexer", () => {
   });
 
   describe("EOF token", () => {
-    test("always ends with EOF", () => {
-      const tokens = tokenize("42");
-      expect(tokens[tokens.length - 1]?.type).toBe(TokenType.EOF);
-    });
-
     test("EOF for empty input", () => {
       const tokens = tokenize("");
       expect(tokens).toHaveLength(1);

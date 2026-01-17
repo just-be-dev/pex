@@ -8,40 +8,14 @@ export enum TokenType {
 
   // Identifiers
   IDENTIFIER = "IDENTIFIER",
-
-  // Keywords (only special expression forms, not effects)
-  IF = "IF",
+  EFFECT_IDENT = "EFFECT_IDENT", // identifier followed by colon, e.g., "let:", "fn:"
 
   // Operators
   PIPE = "PIPE",           // |
   SEMICOLON = "SEMICOLON", // ;
-  COLON = "COLON",         // :
   LPAREN = "LPAREN",       // (
   RPAREN = "RPAREN",       // )
   COMMA = "COMMA",         // ,
-
-  // Arithmetic
-  PLUS = "PLUS",           // +
-  MINUS = "MINUS",         // -
-  STAR = "STAR",           // *
-  SLASH = "SLASH",         // /
-  PERCENT = "PERCENT",     // %
-
-  // Comparison
-  EQ = "EQ",               // ==
-  NE = "NE",               // !=
-  LT = "LT",               // <
-  GT = "GT",               // >
-  LE = "LE",               // <=
-  GE = "GE",               // >=
-
-  // Logical
-  AND = "AND",             // and
-  OR = "OR",               // or
-  NOT = "NOT",             // not
-
-  // Null coalescing
-  NULLISH = "NULLISH",     // ??
 
   // Special
   EOF = "EOF",
@@ -121,9 +95,6 @@ export class Lexer {
       case ";":
         this.advance();
         return { type: TokenType.SEMICOLON, value: ";", line, column, raw: ";" };
-      case ":":
-        this.advance();
-        return { type: TokenType.COLON, value: ":", line, column, raw: ":" };
       case "(":
         this.advance();
         return { type: TokenType.LPAREN, value: "(", line, column, raw: "(" };
@@ -133,70 +104,11 @@ export class Lexer {
       case ",":
         this.advance();
         return { type: TokenType.COMMA, value: ",", line, column, raw: "," };
-      case "+":
-        this.advance();
-        return { type: TokenType.PLUS, value: "+", line, column, raw: "+" };
-      case "-":
-        // Could be minus or start of negative number
-        if (this.isDigit(this.peek(1))) {
-          return this.readNumber();
-        }
-        this.advance();
-        return { type: TokenType.MINUS, value: "-", line, column, raw: "-" };
-      case "*":
-        this.advance();
-        return { type: TokenType.STAR, value: "*", line, column, raw: "*" };
-      case "%":
-        this.advance();
-        return { type: TokenType.PERCENT, value: "%", line, column, raw: "%" };
     }
 
-    // Multi-character operators
-    if (char === "=") {
-      if (this.peek(1) === "=") {
-        this.advance();
-        this.advance();
-        return { type: TokenType.EQ, value: "==", line, column, raw: "==" };
-      }
-      throw new LexerError(`Unexpected character '='`, line, column);
-    }
-
-    if (char === "!") {
-      if (this.peek(1) === "=") {
-        this.advance();
-        this.advance();
-        return { type: TokenType.NE, value: "!=", line, column, raw: "!=" };
-      }
-      throw new LexerError(`Unexpected character '!'`, line, column);
-    }
-
-    if (char === "<") {
-      if (this.peek(1) === "=") {
-        this.advance();
-        this.advance();
-        return { type: TokenType.LE, value: "<=", line, column, raw: "<=" };
-      }
-      this.advance();
-      return { type: TokenType.LT, value: "<", line, column, raw: "<" };
-    }
-
-    if (char === ">") {
-      if (this.peek(1) === "=") {
-        this.advance();
-        this.advance();
-        return { type: TokenType.GE, value: ">=", line, column, raw: ">=" };
-      }
-      this.advance();
-      return { type: TokenType.GT, value: ">", line, column, raw: ">" };
-    }
-
-    if (char === "?") {
-      if (this.peek(1) === "?") {
-        this.advance();
-        this.advance();
-        return { type: TokenType.NULLISH, value: "??", line, column, raw: "??" };
-      }
-      throw new LexerError(`Unexpected character '?'`, line, column);
+    // Negative numbers - special case before identifier reading
+    if (char === "-" && this.isDigit(this.peek(1))) {
+      return this.readNumber();
     }
 
     // Strings
@@ -204,58 +116,8 @@ export class Lexer {
       return this.readString(char);
     }
 
-    // Regex vs Division
-    if (char === "/") {
-      // Heuristic to distinguish between division and regex
-      const lastToken = this.tokens[this.tokens.length - 1];
-      const secondLastToken = this.tokens[this.tokens.length - 2];
-
-      // Regex after these tokens
-      if (!lastToken ||
-          lastToken.type === TokenType.IF ||
-          lastToken.type === TokenType.LPAREN ||
-          lastToken.type === TokenType.PIPE ||
-          lastToken.type === TokenType.COMMA ||
-          lastToken.type === TokenType.SEMICOLON ||
-          lastToken.type === TokenType.COLON) {
-        return this.readRegex();
-      }
-
-      // After identifier, check if it's in a context where regex is expected
-      if (lastToken.type === TokenType.IDENTIFIER) {
-        const thirdLastToken = this.tokens[this.tokens.length - 3];
-        // After "IDENTIFIER COLON VARNAME /regex/" pattern (effect with value)
-        if (secondLastToken?.type === TokenType.COLON &&
-            thirdLastToken?.type === TokenType.IDENTIFIER) {
-          return this.readRegex();
-        }
-        // After comma or lparen (function arguments)
-        if (secondLastToken?.type === TokenType.COMMA ||
-            secondLastToken?.type === TokenType.LPAREN) {
-          return this.readRegex();
-        }
-        // Otherwise treat as division
-        this.advance();
-        return { type: TokenType.SLASH, value: "/", line, column, raw: "/" };
-      }
-
-      // Division after numbers and closing parens
-      if (lastToken.type === TokenType.NUMBER ||
-          lastToken.type === TokenType.RPAREN) {
-        this.advance();
-        return { type: TokenType.SLASH, value: "/", line, column, raw: "/" };
-      }
-
-      // After arithmetic operators, likely division for expressions like "+ - * / %"
-      if (lastToken.type === TokenType.STAR ||
-          lastToken.type === TokenType.PLUS ||
-          lastToken.type === TokenType.MINUS ||
-          lastToken.type === TokenType.PERCENT) {
-        this.advance();
-        return { type: TokenType.SLASH, value: "/", line, column, raw: "/" };
-      }
-
-      // Default to regex
+    // Regex: only when in operand position (where a value is expected)
+    if (char === "/" && this.isOperandPosition()) {
       return this.readRegex();
     }
 
@@ -431,40 +293,36 @@ export class Lexer {
       this.advance();
     }
 
-    // Check for keywords
+    // Check if followed by colon (effect name pattern)
+    let raw = value;
     let type: TokenType;
     let tokenValue: string | boolean | null = value;
 
-    switch (value) {
-      case "if":
-        type = TokenType.IF;
-        break;
-      case "and":
-        type = TokenType.AND;
-        break;
-      case "or":
-        type = TokenType.OR;
-        break;
-      case "not":
-        type = TokenType.NOT;
-        break;
-      case "true":
-        type = TokenType.BOOLEAN;
-        tokenValue = true;
-        break;
-      case "false":
-        type = TokenType.BOOLEAN;
-        tokenValue = false;
-        break;
-      case "null":
-        type = TokenType.NULL;
-        tokenValue = null;
-        break;
-      default:
-        type = TokenType.IDENTIFIER;
+    if (this.peek() === ":") {
+      this.advance(); // consume the colon
+      raw = value + ":";
+      type = TokenType.EFFECT_IDENT;
+    } else {
+      // Check for keywords
+      switch (value) {
+        case "true":
+          type = TokenType.BOOLEAN;
+          tokenValue = true;
+          break;
+        case "false":
+          type = TokenType.BOOLEAN;
+          tokenValue = false;
+          break;
+        case "null":
+          type = TokenType.NULL;
+          tokenValue = null;
+          break;
+        default:
+          type = TokenType.IDENTIFIER;
+      }
     }
 
-    return { type, value: tokenValue, line, column, raw: value };
+    return { type, value: tokenValue, line, column, raw };
   }
 
   private skipWhitespace(): void {
@@ -508,11 +366,48 @@ export class Lexer {
   }
 
   private isIdentifierStart(char: string): boolean {
-    return /[a-zA-Z_$]/.test(char);
+    return /[a-zA-Z_$<>=!?+\-*/%]/.test(char);
   }
 
   private isIdentifierPart(char: string): boolean {
-    return /[a-zA-Z0-9_$]/.test(char);
+    return /[a-zA-Z0-9_$<>=!?+\-*/%]/.test(char);
+  }
+
+  /**
+   * Determines if we're in "operand position" (where a value is expected).
+   * Used to distinguish regex literals from division operators.
+   */
+  private isOperandPosition(): boolean {
+    const lastToken = this.tokens[this.tokens.length - 1];
+
+    // At start of input
+    if (!lastToken) return true;
+
+    // After these tokens, we expect an operand (value)
+    const operandStarters = [
+      TokenType.LPAREN,
+      TokenType.PIPE,
+      TokenType.COMMA,
+      TokenType.SEMICOLON,
+      TokenType.EFFECT_IDENT,
+    ];
+    if (operandStarters.includes(lastToken.type)) return true;
+
+    // An identifier preceded by an operand starter is in argument position,
+    // so another operand (like a regex) can follow
+    if (lastToken.type === TokenType.IDENTIFIER) {
+      const secondLastToken = this.tokens[this.tokens.length - 2];
+      const argPositionStarters = [
+        TokenType.EFFECT_IDENT,
+        TokenType.COMMA,
+        TokenType.LPAREN,
+      ];
+      if (secondLastToken && argPositionStarters.includes(secondLastToken.type)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
 
