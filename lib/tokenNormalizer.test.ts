@@ -2,20 +2,13 @@ import { describe, test, expect } from "bun:test";
 import { tokenize } from "./lexer.ts";
 import { normalizeTokens } from "./tokenNormalizer.ts";
 import { TokenType } from "./lexer.ts";
+import { print } from "./printer.ts";
 
 // Helper to get normalized tokens as a readable string
 const normalizeSource = (source: string) => {
   const tokens = tokenize(source);
   const normalized = normalizeTokens(tokens);
-  return normalized
-    .filter(t => t.type !== TokenType.EOF)
-    .map(t => {
-      if (t.type === TokenType.STRING) {
-        return `"${t.value}"`;
-      }
-      return String(t.value);
-    })
-    .join(" ");
+  return print(normalized);
 };
 
 // Helper to check if normalized tokens match expected pattern
@@ -29,21 +22,21 @@ describe("Token Normalizer", () => {
     test("wraps bare identifier in parens and injects $$", () => {
       expectNormalized(
         "lower",
-        "( lower $$ )"
+        "(lower $$)"
       );
     });
 
     test("wraps identifier with args in parens and injects $$", () => {
       expectNormalized(
         'split " "',
-        '( split $$ " " )'
+        '(split $$ " ")'
       );
     });
 
     test("wraps multiple args and injects $$", () => {
       expectNormalized(
         "add 1 2",
-        "( add $$ 1 2 )"
+        "(add $$ 1 2)"
       );
     });
   });
@@ -52,21 +45,21 @@ describe("Token Normalizer", () => {
     test("normalizes simple pipe (a | b)", () => {
       expectNormalized(
         "a | b",
-        "( b a $$ )"
+        "(b a $$)"
       );
     });
 
     test("normalizes three-stage pipeline (a | b | c)", () => {
       expectNormalized(
         "a | b | c",
-        "( c b a $$ )"
+        "(c b a $$)"
       );
     });
 
     test("normalizes pipe with function call", () => {
       expectNormalized(
         'a | split " "',
-        '( split a $$ " " )'
+        '(split a $$ " ")'
       );
     });
 
@@ -74,7 +67,7 @@ describe("Token Normalizer", () => {
       // Explicit parens disable $$-injection
       expectNormalized(
         "(a | b)",
-        "( b a )"
+        "(b a)"
       );
     });
 
@@ -82,7 +75,7 @@ describe("Token Normalizer", () => {
       // (a | b) | c - explicit parens at the start prevent $$ injection entirely
       expectNormalized(
         "(a | b) | c",
-        "( c b a )"
+        "(c b a)"
       );
 
       // Also verify no PIPE tokens remain
@@ -97,21 +90,21 @@ describe("Token Normalizer", () => {
     test("splits at semicolon", () => {
       expectNormalized(
         "a; b",
-        "( a $$ ) ( b $$ )"
+        "(a $$) (b $$)"
       );
     });
 
     test("splits multiple semicolons", () => {
       expectNormalized(
         "a; b; c",
-        "( a $$ ) ( b $$ ) ( c $$ )"
+        "(a $$) (b $$) (c $$)"
       );
     });
 
     test("handles semicolon with function calls", () => {
       expectNormalized(
         'split " "; lower',
-        '( split $$ " " ) ( lower $$ )'
+        '(split $$ " ") (lower $$)'
       );
     });
   });
@@ -120,28 +113,28 @@ describe("Token Normalizer", () => {
     test("injects $$ into call without source refs", () => {
       expectNormalized(
         "lower",
-        "( lower $$ )"
+        "(lower $$)"
       );
     });
 
     test("does not inject $$ if $ is present", () => {
       expectNormalized(
         "add $ 1",
-        "( add $ 1 )"
+        "(add $ 1)"
       );
     });
 
     test("does not inject $$ if $$ is present", () => {
       expectNormalized(
         "add $$ 1",
-        "( add $$ 1 )"
+        "(add $$ 1)"
       );
     });
 
     test("does not inject $$ if $0 is present", () => {
       expectNormalized(
         "add $0 1",
-        "( add $0 1 )"
+        "(add $0 1)"
       );
     });
 
@@ -159,7 +152,7 @@ describe("Token Normalizer", () => {
       // If user writes (foo (bar)), they're being explicit about structure
       expectNormalized(
         "(foo (bar))",
-        "( foo ( bar ) )"
+        "(foo (bar))"
       );
 
       // Verify no SOURCE_REF tokens exist (all parens are explicit)
@@ -173,13 +166,13 @@ describe("Token Normalizer", () => {
       // Implicit parens (no parens in source) get $$-injection
       expectNormalized(
         "foo bar",
-        "( foo $$ bar )"
+        "(foo $$ bar)"
       );
 
       // Explicit parens (parens in source) prevent $$-injection
       expectNormalized(
         "(foo bar)",
-        "( foo bar )"
+        "(foo bar)"
       );
     });
   });
@@ -283,7 +276,7 @@ describe("Token Normalizer", () => {
       // Explicit parens prevent $$-injection
       expectNormalized(
         "(lower)",
-        "( lower )"
+        "(lower)"
       );
     });
 
@@ -299,7 +292,7 @@ describe("Token Normalizer", () => {
     test("handles operator identifiers", () => {
       expectNormalized(
         "+ 1 2",
-        "( + $$ 1 2 )"
+        "(+ $$ 1 2)"
       );
     });
 
