@@ -72,12 +72,8 @@ export class Parser {
   // ============================================
 
   private isStatementStart(): boolean {
-    // Check for IDENTIFIER followed by COLON: `effect_name:`
-    if (this.check(TokenType.IDENTIFIER)) {
-      // Look ahead to see if colon follows
-      return this.checkNext(TokenType.COLON);
-    }
-    return false;
+    // Check for EFFECT_IDENT: `effect_name:`
+    return this.check(TokenType.EFFECT_IDENT);
   }
 
   private checkNext(type: TokenType): boolean {
@@ -90,18 +86,16 @@ export class Parser {
   }
 
   private parseEffectStatement(): AST.EffectStatement {
-    // Parse: IDENTIFIER : expression
+    // Parse: EFFECT_IDENT expression
     // The expression is parsed as a single unit, which might be:
     // - A simple atom: `print: "hello"`
     // - A call: `let: x 10` (parsed as implicit call-like structure)
     // - A grouped expression: `assert: (> x 0)`
     const effectNameToken = this.consume(
-      TokenType.IDENTIFIER,
+      TokenType.EFFECT_IDENT,
       "Expected effect name"
     );
     const effectName = String(effectNameToken.value);
-
-    this.consume(TokenType.COLON, `Expected ":" after effect name`);
 
     // Parse a single expression that represents the effect's arguments
     // This could be multiple tokens that form a call-like structure
@@ -219,7 +213,7 @@ export class Parser {
     }
 
     // If expression
-    if (this.match(TokenType.IF)) {
+    if (this.matchIdentifier("if")) {
       return this.parseIfExpression();
     }
 
@@ -284,24 +278,20 @@ export class Parser {
   }
 
   private isOperatorToken(): boolean {
-    const t = this.peek().type;
-    return [
-      TokenType.PLUS,
-      TokenType.MINUS,
-      TokenType.STAR,
-      TokenType.SLASH,
-      TokenType.PERCENT,
-      TokenType.EQ,
-      TokenType.NE,
-      TokenType.LT,
-      TokenType.GT,
-      TokenType.LE,
-      TokenType.GE,
-      TokenType.AND,
-      TokenType.OR,
-      TokenType.NOT,
-      TokenType.NULLISH,
-    ].includes(t);
+    const token = this.peek();
+    const t = token.type;
+
+    // All operators are now identifiers
+    if (t === TokenType.IDENTIFIER) {
+      const value = String(token.value);
+      return [
+        "+", "-", "*", "/", "%",
+        "==", "!=", "<", ">", "<=", ">=",
+        "and", "or", "not", "??"
+      ].includes(value);
+    }
+
+    return false;
   }
 
   private parseCallOrIdentifier(): AST.Expression {
@@ -380,14 +370,9 @@ export class Parser {
         TokenType.PIPE,
         TokenType.RPAREN,
         TokenType.EOF,
-        TokenType.COLON,
+        TokenType.EFFECT_IDENT,
       ].includes(t)
     ) {
-      return false;
-    }
-
-    // Any identifier followed by colon is an effect - not an argument
-    if (t === TokenType.IDENTIFIER && this.checkNext(TokenType.COLON)) {
       return false;
     }
 
@@ -521,6 +506,14 @@ export class Parser {
         this.advance();
         return true;
       }
+    }
+    return false;
+  }
+
+  private matchIdentifier(value: string): boolean {
+    if (this.check(TokenType.IDENTIFIER) && this.peek().value === value) {
+      this.advance();
+      return true;
     }
     return false;
   }
