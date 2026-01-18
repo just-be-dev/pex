@@ -38,25 +38,12 @@ export interface List {
 export type SExpr = Atom | List;
 
 // ============================================
-// Effect Statement
-// ============================================
-
-// Effect statements are special forms that appear before the main expression
-// Examples: let: x 10, fn: double (x) * x 2
-export interface EffectStatement {
-  type: "EffectStatement";
-  name: string;
-  arguments: SExpr[];
-}
-
-// ============================================
 // Program Node
 // ============================================
 
 export interface Program {
   type: "Program";
-  statements: EffectStatement[]; // Special forms (let, fn, etc.)
-  expression: SExpr | null; // The final expression (program output)
+  expressions: SExpr[]; // One or more top-level expressions
 }
 
 // ============================================

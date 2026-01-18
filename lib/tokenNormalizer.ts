@@ -286,15 +286,11 @@ function normalizePipesAtCurrentLevel(tokens: Token[], insideExplicitParens: boo
 
 /**
  * Make all calls explicit by wrapping ungrouped token sequences in parens
+ * Effects (EFFECT_IDENT) are wrapped like regular calls, but won't get $$ injection
  */
 function makeCallsExplicit(tokens: Token[]): Token[] {
   if (tokens.length === 0) {
     return [];
-  }
-
-  // Don't wrap effect statements (they start with EFFECT_IDENT)
-  if (tokens[0]!.type === TokenType.EFFECT_IDENT) {
-    return tokens;
   }
 
   // If already wrapped in parens, we're done

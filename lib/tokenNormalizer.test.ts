@@ -178,24 +178,24 @@ describe("Token Normalizer", () => {
   });
 
   describe("Effect statements", () => {
-    test("does not wrap effect statements", () => {
+    test("wraps effect statements like regular expressions", () => {
       const tokens = tokenize("let: x 10");
       const normalized = normalizeTokens(tokens);
 
-      // Should not add extra parens around the effect statement
+      // Effects now get wrapped in parens like regular expressions
       const result = normalized
         .filter(t => t.type !== TokenType.EOF)
         .map(t => t.type)
         .join(" ");
 
-      expect(result).toBe("EFFECT_IDENT IDENTIFIER NUMBER");
+      expect(result).toBe("LPAREN EFFECT_IDENT IDENTIFIER NUMBER RPAREN");
     });
 
     test("does not inject $$ into effect statements", () => {
       const tokens = tokenize("let: x 10");
       const normalized = normalizeTokens(tokens);
 
-      // Should have no SOURCE_REF tokens
+      // Should have no SOURCE_REF tokens (no $$ injection for effects)
       const hasSourceRef = normalized.some(t => t.type === TokenType.SOURCE_REF);
       expect(hasSourceRef).toBe(false);
     });
@@ -208,8 +208,9 @@ describe("Token Normalizer", () => {
       const hasNoPipes = normalized.every(t => t.type !== TokenType.PIPE);
       expect(hasNoPipes).toBe(true);
 
-      // Effect statement itself should not be wrapped
-      expect(normalized[0]?.type).toBe(TokenType.EFFECT_IDENT);
+      // Effect statement is now wrapped in parens
+      expect(normalized[0]?.type).toBe(TokenType.LPAREN);
+      expect(normalized[1]?.type).toBe(TokenType.EFFECT_IDENT);
     });
   });
 
@@ -229,14 +230,15 @@ describe("Token Normalizer", () => {
       const tokens = tokenize("let: x 10  lower");
       const normalized = normalizeTokens(tokens);
 
-      // Without a semicolon, this is all one group starting with EFFECT_IDENT
-      // So it doesn't get wrapped - the effect statement consumes all tokens
-      expect(normalized[0]?.type).toBe(TokenType.EFFECT_IDENT);
+      // Effects now get wrapped, so the group is wrapped in parens
+      expect(normalized[0]?.type).toBe(TokenType.LPAREN);
+      expect(normalized[1]?.type).toBe(TokenType.EFFECT_IDENT);
 
-      // All tokens remain in order (no wrapping for effect groups)
-      expect(normalized[1]?.type).toBe(TokenType.IDENTIFIER); // x
-      expect(normalized[2]?.type).toBe(TokenType.NUMBER); // 10
-      expect(normalized[3]?.type).toBe(TokenType.IDENTIFIER); // lower
+      // All tokens are wrapped in parens now
+      expect(normalized[2]?.type).toBe(TokenType.IDENTIFIER); // x
+      expect(normalized[3]?.type).toBe(TokenType.NUMBER); // 10
+      expect(normalized[4]?.type).toBe(TokenType.IDENTIFIER); // lower
+      expect(normalized[5]?.type).toBe(TokenType.RPAREN);
     });
 
     test("handles complex real-world example", () => {
@@ -249,9 +251,11 @@ describe("Token Normalizer", () => {
       );
       expect(hasNoSpecialTokens).toBe(true);
 
-      // Should start with first effect (value is "let", raw is "let:")
-      expect(normalized[0]?.type).toBe(TokenType.EFFECT_IDENT);
-      expect(normalized[0]?.value).toBe("let");
+      // Should start with LPAREN (effects are wrapped now)
+      expect(normalized[0]?.type).toBe(TokenType.LPAREN);
+      // Then the first effect
+      expect(normalized[1]?.type).toBe(TokenType.EFFECT_IDENT);
+      expect(normalized[1]?.value).toBe("let");
     });
   });
 
