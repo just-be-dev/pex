@@ -688,9 +688,9 @@ function injectProgramInput(
               // There's another nested level - recursively inject into it
               // Reconstruct with LPAREN/RPAREN and recursively process
               const reconstructed = [
-                nestedGroup[0], // LPAREN
+                nestedGroup[0]!, // LPAREN
                 ...nestedContents,
-                nestedGroup[nestedGroup.length - 1] // RPAREN
+                nestedGroup[nestedGroup.length - 1]! // RPAREN
               ];
               // Recursively call injectProgramInput on this nested group
               const injected = injectProgramInputRecursive(reconstructed, options);

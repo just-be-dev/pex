@@ -149,7 +149,7 @@ export class Evaluator {
         return nullValue(); // Out of bounds returns null
       }
 
-      return input.elements[index];
+      return input.elements[index]!;
     }
 
     throw new RuntimeError(`Unknown source reference: ${name}`);
@@ -409,6 +409,9 @@ export class Evaluator {
     }
 
     // Evaluate function body
+    if (func.body === null) {
+      throw new RuntimeError("Cannot evaluate builtin function without body");
+    }
     return this.evaluate(func.body, funcEnv);
   }
 }
