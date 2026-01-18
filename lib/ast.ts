@@ -96,21 +96,21 @@ export function list(...elements: SExpr[]): List {
 // ============================================
 
 // Helper to check if an identifier is a source reference ($, $$, $0, $1, etc.)
-export function isSourceRef(expr: SExpr): boolean {
+export function isSourceRef(expr: SExpr): expr is Atom {
   if (!isIdentifier(expr)) return false;
   const name = expr.value as string;
   return name === "$" || name === "$$" || /^\$\d+$/.test(name);
 }
 
-export function isPipelineRef(expr: SExpr): boolean {
+export function isPipelineRef(expr: SExpr): expr is Atom {
   return isIdentifier(expr) && expr.value === "$";
 }
 
-export function isProgramInput(expr: SExpr): boolean {
+export function isProgramInput(expr: SExpr): expr is Atom {
   return isIdentifier(expr) && expr.value === "$$";
 }
 
-export function isArrayRef(expr: SExpr): boolean {
+export function isArrayRef(expr: SExpr): expr is Atom {
   if (!isIdentifier(expr)) return false;
   const name = expr.value as string;
   return /^\$\d+$/.test(name);

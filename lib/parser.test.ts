@@ -243,7 +243,7 @@ describe("Parser", () => {
 
     test("parses deeply nested lists", () => {
       const ast = parseSource("(((foo)))");
-      let expr: AST.SExpr | undefined = ast.expression;
+      let expr: AST.SExpr | null | undefined = ast.expression;
       for (let i = 0; i < 3; i++) {
         expect(expr?.type).toBe("List");
         expr = (expr as AST.List).elements[0];
