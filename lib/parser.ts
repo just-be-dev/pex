@@ -35,22 +35,21 @@ export class Parser {
   // ============================================
 
   parse(): AST.Program {
-    const statements: AST.Statement[] = [];
-    let expression: AST.Expression | null = null;
-    const startToken = this.peek();
+    const statements: AST.EffectStatement[] = [];
+    let expression: AST.SExpr | null = null;
 
     // Parse statements and final expression
     while (!this.isAtEnd()) {
-      // Try to parse as statement first (special forms with :)
-      if (this.isStatementStart()) {
-        statements.push(this.parseStatement());
+      // Try to parse as effect statement first (special forms with :)
+      if (this.isEffectStatementStart()) {
+        statements.push(this.parseEffectStatement());
       } else {
         // Must be the final expression
         expression = this.parseExpression();
 
         // After parsing expression, check if there's more
         // If more special forms follow, that's an error (expression must be last)
-        if (!this.isAtEnd() && this.isStatementStart()) {
+        if (!this.isAtEnd() && this.isEffectStatementStart()) {
           throw this.error(
             "Special forms must appear before the final expression",
             this.peek()
@@ -63,17 +62,68 @@ export class Parser {
       type: "Program",
       statements,
       expression,
-      span: this.makeSpan(startToken, this.previous()),
     };
   }
 
   // ============================================
-  // Statement Parsing (Effects - Generic Special Forms)
+  // Effect Statement Parsing
   // ============================================
 
-  private isStatementStart(): boolean {
-    // Check for EFFECT_IDENT: `effect_name:`
+  private isEffectStatementStart(): boolean {
     return this.check(TokenType.EFFECT_IDENT);
+  }
+
+  private parseEffectStatement(): AST.EffectStatement {
+    const effectNameToken = this.consume(
+      TokenType.EFFECT_IDENT,
+      "Expected effect name"
+    );
+    const effectName = String(effectNameToken.value);
+
+    // Parse arguments until we hit another effect or EOF
+    const args: AST.SExpr[] = [];
+
+    while (!this.isAtEnd() && !this.isEffectStatementStart()) {
+      if (this.check(TokenType.EOF)) break;
+
+      // Heuristic: If we've parsed 2+ arguments and the last was a list,
+      // and we now see an atom that's not followed by a paren,
+      // stop to allow for final expression
+      if (
+        args.length >= 2 &&
+        args[args.length - 1]!.type === "List" &&
+        (this.check(TokenType.IDENTIFIER) || this.check(TokenType.SOURCE_REF)) &&
+        !this.checkNext(TokenType.LPAREN)
+      ) {
+        break;
+      }
+
+      // Heuristic: If we've parsed 2+ non-list arguments and the next token
+      // is LPAREN (which starts a new expression), stop to allow for final expression
+      // This handles cases like: let: x 10  (+ x TAX)
+      if (
+        args.length >= 2 &&
+        args[args.length - 1]!.type === "Atom" &&
+        this.check(TokenType.LPAREN)
+      ) {
+        break;
+      }
+
+      // Heuristic: If we've parsed 3+ arguments (typical for fn: name params body)
+      // and the next token is LPAREN, stop to allow for final expression
+      // This handles cases like: fn: foo (x) (+ x 1)  (bar $$)
+      if (args.length >= 3 && this.check(TokenType.LPAREN)) {
+        break;
+      }
+
+      args.push(this.parseExpression());
+    }
+
+    return {
+      type: "EffectStatement",
+      name: effectName,
+      arguments: args,
+    };
   }
 
   private checkNext(type: TokenType): boolean {
@@ -81,311 +131,56 @@ export class Parser {
     return this.tokens[this.current + 1]!.type === type;
   }
 
-  private parseStatement(): AST.Statement {
-    return this.parseEffectStatement();
-  }
-
-  private parseEffectStatement(): AST.EffectStatement {
-    // Parse: EFFECT_IDENT expression
-    // The expression is parsed as a single unit, which might be:
-    // - A simple atom: `print: "hello"`
-    // - A call: `let: x 10` (parsed as implicit call-like structure)
-    // - A grouped expression: `assert: (> x 0)`
-    const effectNameToken = this.consume(
-      TokenType.EFFECT_IDENT,
-      "Expected effect name"
-    );
-    const effectName = String(effectNameToken.value);
-
-    // Parse a single expression that represents the effect's arguments
-    // This could be multiple tokens that form a call-like structure
-    // We parse until we hit another effect or EOF
-    const args: AST.Expression[] = [];
-
-    // Keep parsing atoms/groups until we hit an effect boundary
-    while (!this.isAtEnd() && !this.isStatementStart()) {
-      if (this.check(TokenType.EOF)) break;
-
-      // Stop if we encounter an operator at the start of a new argument
-      // This likely indicates the start of a new expression
-      // Example: "let: x 10  + y 1" stops at +
-      if (args.length > 0 && this.isOperatorToken()) {
-        break;
-      }
-
-      // Heuristic: If we've parsed 2+ arguments and the last was grouped,
-      // and we now see an ungrouped identifier, stop to allow for final expression
-      // Example: "fn: is_valid (email) (body) next_expr" stops before next_expr
-      if (
-        args.length >= 2 &&
-        args[args.length - 1]!.type === "GroupExpression" &&
-        this.check(TokenType.IDENTIFIER) &&
-        !this.checkNext(TokenType.LPAREN)
-      ) {
-        break;
-      }
-
-      // Parse as atoms or grouped expressions only
-      // Don't parse as full calls to avoid greedy consumption
-      args.push(this.parseEffectArgument());
-    }
-
-    return {
-      type: "EffectStatement",
-      name: effectName,
-      arguments: args,
-      span: this.makeSpan(effectNameToken, this.previous()),
-    };
-  }
-
-  private parseEffectArgument(): AST.Expression {
-    // Parse a single argument for an effect
-    // This can be:
-    // - A grouped expression: (expr)
-    // - An empty group: () (represented as null literal)
-    // - An operator identifier: *, +, etc.
-    // - An atom: number, string, identifier, etc.
-
-    if (this.check(TokenType.LPAREN)) {
-      const lparenToken = this.peek();
-      this.advance(); // consume (
-
-      // Check for empty group ()
-      if (this.check(TokenType.RPAREN)) {
-        this.advance(); // consume )
-        // Represent empty group as null literal
-        return {
-          type: "NullLiteral",
-          span: this.makeSpan(lparenToken, this.previous()),
-        };
-      }
-
-      const expr = this.parseExpression();
-      this.consume(TokenType.RPAREN, 'Expected ")" after expression');
-      return {
-        type: "GroupExpression",
-        expression: expr,
-        span: expr.span,
-      };
-    }
-
-    // Handle operators as identifiers
-    if (this.isOperatorToken()) {
-      return this.parseOperatorAsIdentifier();
-    }
-
-    // Parse as atom
-    return this.parseAtom();
-  }
-
   // ============================================
-  // Expression Parsing (Recursive Descent)
+  // Expression Parsing
   // ============================================
 
-  private parseExpression(): AST.Expression {
-    return this.parsePrimary();
-  }
-
-  private parsePrimary(): AST.Expression {
-    // Grouped expression
-    if (this.match(TokenType.LPAREN)) {
-      return this.parseGroupExpression();
-    }
-
-    // If expression
-    if (this.matchIdentifier("if")) {
-      return this.parseIfExpression();
-    }
-
-    // Try to parse as call (identifier/operator followed by arguments)
-    // or as standalone atom
-    if (this.isCallStart()) {
-      return this.parseCallOrIdentifier();
-    }
-
-    // Atom (literal)
-    return this.parseAtom();
-  }
-
-  private parseGroupExpression(): AST.GroupExpression {
-    const lparenToken = this.previous();
-    const expression = this.parseExpression();
-    this.consume(TokenType.RPAREN, 'Expected ")" after expression');
-
-    return {
-      type: "GroupExpression",
-      expression,
-      span: this.makeSpan(lparenToken, this.previous()),
-    };
-  }
-
-  private parseIfExpression(): AST.IfExpression {
-    const ifToken = this.previous();
-
-    // Parse each part as an "argument" (atom or grouped expression)
-    // This prevents greedy call parsing from consuming all three as one call
-    const condition = this.parseIfArg();
-    const consequent = this.parseIfArg();
-    const alternate = this.parseIfArg();
-
-    return {
-      type: "IfExpression",
-      condition,
-      consequent,
-      alternate,
-      span: this.makeSpan(ifToken, this.previous()),
-    };
-  }
-
-  private parseIfArg(): AST.Expression {
-    // Parse as grouped expression or atom (not a full call)
+  private parseExpression(): AST.SExpr {
+    // List (parenthesized expression)
     if (this.check(TokenType.LPAREN)) {
-      this.advance(); // consume (
-      const expr = this.parseExpression();
-      this.consume(TokenType.RPAREN, 'Expected ")" after expression');
-      return {
-        type: "GroupExpression",
-        expression: expr,
-        span: expr.span,
-      };
+      return this.parseList();
     }
+
+    // Atom (literal or identifier)
     return this.parseAtom();
   }
 
-  private isCallStart(): boolean {
-    // Call starts with identifier or operator
-    return this.check(TokenType.IDENTIFIER) || this.isOperatorToken();
-  }
+  private parseList(): AST.List {
+    this.consume(TokenType.LPAREN, "Expected '('");
 
-  private isOperatorToken(): boolean {
-    const token = this.peek();
-    const t = token.type;
+    const elements: AST.SExpr[] = [];
 
-    // All operators are now identifiers
-    if (t === TokenType.IDENTIFIER) {
-      const value = String(token.value);
-      return [
-        "+", "-", "*", "/", "%",
-        "==", "!=", "<", ">", "<=", ">=",
-        "and", "or", "not", "??"
-      ].includes(value);
+    // Parse elements until we hit the closing paren
+    while (!this.check(TokenType.RPAREN) && !this.isAtEnd()) {
+      elements.push(this.parseExpression());
     }
 
-    return false;
-  }
+    this.consume(TokenType.RPAREN, "Expected ')' after list elements");
 
-  private parseCallOrIdentifier(): AST.Expression {
-    const startToken = this.peek();
-
-    // Parse callee (identifier or operator)
-    let callee: AST.Identifier;
-    if (this.isOperatorToken()) {
-      callee = this.parseOperatorAsIdentifier();
-    } else {
-      const idToken = this.advance();
-      callee = this.makeIdentifier(idToken);
-    }
-
-    // Check if followed by arguments
-    const args = this.parseArguments();
-
-    // If no arguments, return as identifier
-    if (args.length === 0) {
-      return callee;
-    }
-
-    // Return as call
     return {
-      type: "CallExpression",
-      callee,
-      arguments: args,
-      span: this.makeSpan(startToken, this.previous()),
+      type: "List",
+      elements,
     };
   }
 
-  private parseOperatorAsIdentifier(): AST.Identifier {
-    const token = this.advance();
-    return {
-      type: "Identifier",
-      name: String(token.value),
-      isSourceRef: false,
-      isPipelineRef: false,
-      isProgramInput: false,
-      span: this.makeSpan(token, token),
-    };
-  }
-
-  private parseArguments(): AST.Expression[] {
-    const args: AST.Expression[] = [];
-
-    // Arguments are atoms or grouped expressions
-    // Stop at: PIPE, RPAREN, EOF, COLON, or next statement keyword
-    while (this.isArgumentStart()) {
-      if (this.check(TokenType.LPAREN)) {
-        this.advance(); // consume (
-        const expr = this.parseExpression();
-        this.consume(TokenType.RPAREN, 'Expected ")" after argument');
-        args.push({
-          type: "GroupExpression",
-          expression: expr,
-          span: expr.span,
-        });
-      } else {
-        args.push(this.parseAtom());
-      }
-    }
-
-    return args;
-  }
-
-  private isArgumentStart(): boolean {
-    // Arguments can be atoms or grouped expressions
-    if (this.isAtEnd()) return false;
-
-    const t = this.peek().type;
-
-    // Stop tokens - not an argument
-    if (
-      [
-        TokenType.RPAREN,
-        TokenType.EOF,
-        TokenType.EFFECT_IDENT,
-      ].includes(t)
-    ) {
-      return false;
-    }
-
-    // Atoms or grouped expressions (including SOURCE_REF)
-    return (
-      t === TokenType.NUMBER ||
-      t === TokenType.STRING ||
-      t === TokenType.REGEX ||
-      t === TokenType.BOOLEAN ||
-      t === TokenType.NULL ||
-      t === TokenType.IDENTIFIER ||
-      t === TokenType.SOURCE_REF ||
-      t === TokenType.LPAREN
-    );
-  }
-
-  private parseAtom(): AST.Expression {
+  private parseAtom(): AST.Atom {
     const token = this.peek();
 
     if (this.match(TokenType.NUMBER)) {
       return {
-        type: "NumberLiteral",
+        type: "Atom",
+        atomType: "number",
         value: token.value as number,
         raw: token.raw,
-        span: this.makeSpan(token, token),
       };
     }
 
     if (this.match(TokenType.STRING)) {
       return {
-        type: "StringLiteral",
+        type: "Atom",
+        atomType: "string",
         value: token.value as string,
         raw: token.raw,
-        span: this.makeSpan(token, token),
       };
     }
 
@@ -395,71 +190,52 @@ export class Parser {
       const pattern = regexStr.slice(1, lastSlash);
       const flags = regexStr.slice(lastSlash + 1);
 
+      // Create RegExp object
+      const regexValue = new RegExp(pattern, flags);
+
       return {
-        type: "RegexLiteral",
-        pattern,
-        flags,
+        type: "Atom",
+        atomType: "regex",
+        value: regexValue,
         raw: token.raw,
-        span: this.makeSpan(token, token),
       };
     }
 
     if (this.match(TokenType.BOOLEAN)) {
       return {
-        type: "BooleanLiteral",
+        type: "Atom",
+        atomType: "boolean",
         value: token.value as boolean,
-        span: this.makeSpan(token, token),
+        raw: token.raw,
       };
     }
 
     if (this.match(TokenType.NULL)) {
       return {
-        type: "NullLiteral",
-        span: this.makeSpan(token, token),
+        type: "Atom",
+        atomType: "null",
+        value: null,
+        raw: token.raw,
       };
     }
 
     if (this.match(TokenType.IDENTIFIER)) {
-      return this.makeIdentifier(token);
-    }
-
-    if (this.match(TokenType.SOURCE_REF)) {
-      return this.makeIdentifier(token);
-    }
-
-    throw this.error(`Unexpected token: ${token.type}`, token);
-  }
-
-  // ============================================
-  // Helper: Create Identifier with Source Ref Detection
-  // ============================================
-
-  private makeIdentifier(token: Token): AST.Identifier {
-    const name = String(token.value);
-
-    // Handle SOURCE_REF tokens
-    if (token.type === TokenType.SOURCE_REF) {
-      const sourceToken = token as any; // SourceRefToken
       return {
-        type: "Identifier",
-        name,
-        isSourceRef: true,
-        isPipelineRef: sourceToken.refType === 'pipeline',
-        isProgramInput: sourceToken.refType === 'program',
-        arrayIndex: sourceToken.arrayIndex,
-        span: this.makeSpan(token, token),
+        type: "Atom",
+        atomType: "identifier",
+        value: String(token.value),
       };
     }
 
-    // Regular identifier - no special handling needed
-    return {
-      type: "Identifier",
-      name,
-      isSourceRef: false,
-      isPipelineRef: false,
-      isProgramInput: false,
-      span: this.makeSpan(token, token),
-    };
+    if (this.match(TokenType.SOURCE_REF)) {
+      return {
+        type: "Atom",
+        atomType: "identifier",
+        value: String(token.value),
+      };
+    }
+
+    throw this.error(`Unexpected token: ${token.type}`, token);
   }
 
   // ============================================
@@ -498,14 +274,6 @@ export class Parser {
     return false;
   }
 
-  private matchIdentifier(value: string): boolean {
-    if (this.check(TokenType.IDENTIFIER) && this.peek().value === value) {
-      this.advance();
-      return true;
-    }
-    return false;
-  }
-
   private consume(type: TokenType, message: string): Token {
     if (this.check(type)) return this.advance();
     throw this.error(message, this.peek());
@@ -517,17 +285,6 @@ export class Parser {
 
   private error(message: string, token: Token): ParseError {
     return new ParseError(message, token.line, token.column, token);
-  }
-
-  // ============================================
-  // Span Construction
-  // ============================================
-
-  private makeSpan(start: Token, end: Token): AST.SourceSpan {
-    return {
-      start: { line: start.line, column: start.column },
-      end: { line: end.line, column: end.column + end.raw.length },
-    };
   }
 }
 
