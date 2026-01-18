@@ -46,9 +46,9 @@ email | lower | trim
 | `;` | Expression terminator | `let x 10;` |
 | `( )` | Grouping (only when needed) | `(if (> x 10) a b)` |
 
-### Special Forms
+### Effects (Special Forms)
 
-Special forms use a `:` postfix to indicate they **do not produce output** - they only have side effects (bindings, logging, assertions, etc.).
+Effects use a `:` postfix to indicate they **do not receive `$$` auto-injection**. They're used for side effects (bindings, logging, assertions, etc.) and can appear anywhere in an expression.
 
 ```lisp
 ;; Variable binding (no output)
@@ -67,53 +67,73 @@ if CONDITION TRUE_EXPR FALSE_EXPR
 lower | trim
 ```
 
-**The `:` postfix means**: "This form doesn't contribute to the program's output."
+**The `:` postfix means**: "Don't auto-inject `$$` into this expression."
 
 ---
 
 ## Program Structure
 
-A Pex program consists of:
+A Pex program consists of **one or more top-level expressions**. Expressions may be **effects** (identifiers with `:` postfix) which don't receive automatic `$$` injection.
 
-1. **Special forms** (optional) - Statements with `:` postfix that don't produce output
-2. **Expression** (required) - The computation that produces the program result
+**Effects** (`:` postfix) are regular expressions that:
+- Don't get automatic `$$` injection
+- Are used for side effects (bindings, logging, assertions)
+- Can appear at the top level or nested anywhere in the expression tree
+- Can be used conditionally
 
-**Special forms** include:
+**Effects include:**
 - `let:` - Variable bindings
 - `fn:` - Function definitions
 - `print:` - Console output (for debugging)
 - `debug:` - Debug logging
 - `assert:` - Runtime assertions
 
-**Expressions** are everything else - they compute and return values.
-
 ### Key Distinction
 
-```lisp
-;; Special forms (: postfix) - side effects only, no output
-let: x 10
-fn: double (x) * x 2
-print: "Processing..."
+**Effects vs Regular Expressions:**
 
-;; Expression - produces the program output
-double $$
+```lisp
+;; Regular expression - gets $$ auto-injected
+lower       ;; → (lower $$)
+
+;; Effect - no $$ auto-injection
+let: x 10   ;; → (let: x 10)  -- no $$ added
 ```
 
-The semicolon (`;`) is purely optional syntactic sugar and has no semantic meaning.
+The `:` postfix is the **only** difference - effects don't get `$$` auto-injection.
 
-### Example
+### Basic Example
 
 ```lisp
-;; Setup (special forms)
+;; Sequential effects (traditional style)
 let: TAX_RATE 0.08
 fn: add_tax (price) * price (+ 1 TAX_RATE)
-print: "Tax calculator ready"
-
-;; Computation (expression - this is the output)
 add_tax $$
 ```
 
-Only the final expression contributes to the program's output. All special forms are for side effects.
+### Nested Effects
+
+Effects are expressions, so they can nest:
+
+```lisp
+;; Nested bindings
+(let: x 10
+  (let: y 20
+    (+ x y)))
+
+;; Conditional effects
+(if (> count 0)
+  (let: result (* count 2) result)
+  0)
+
+;; Effects in function bodies
+fn: process (data)
+  (let: cleaned (trim data)
+    (let: normalized (lower cleaned)
+      normalized))
+```
+
+The semicolon (`;`) is purely optional syntactic sugar and has no semantic meaning.
 
 ---
 
@@ -245,11 +265,11 @@ foo bar       →  (foo $$ bar)   # $$ injected - implicit parens
 (bar)         →  (bar)          # Keep top-level parens (prevents spurious $$ injection)
 ```
 
-**Special forms normalize to S-expressions:**
+**Effects normalize to S-expressions (wrapped but no $$ injection):**
 ```
-let: x 10   →  (let x 10)
-fn: f (x) body  →  (fn f (params x) body)
-print: "hello"  →  (print "hello")
+let: x 10   →  (let: x 10)         # Wrapped in parens, but no $$ injected
+fn: f (x) body  →  (fn: f (x) body)  # Effects never get $$ auto-injection
+print: "hello"  →  (print: "hello")
 ```
 
 **Operator tokenization:**
@@ -340,7 +360,7 @@ not a
 
 ## Debugging and Logging
 
-Special forms with `:` postfix can be used for debugging without affecting the output:
+Effects (`:` postfix) can be used for debugging. They're regular expressions that can appear anywhere:
 
 ```lisp
 ;; Print to console
@@ -482,17 +502,7 @@ lenses:
 ## Grammar
 
 ```ebnf
-program    := special_form* expression
-
-special_form := 
-           | 'let:' IDENTIFIER expression
-           | 'fn:' IDENTIFIER '(' params ')' expression
-           | 'print:' expression
-           | 'debug:' expression
-           | 'assert:' expression
-           | IDENTIFIER ':' expression
-
-params     := IDENTIFIER*
+program    := expression*
 
 expression := pipeline
 
@@ -500,9 +510,12 @@ pipeline   := primary ('|' primary)*
 
 primary    := atom
            |  call
+           |  effect
            |  '(' expression ')'
 
 call       := IDENTIFIER argument*
+
+effect     := EFFECT_IDENT argument*
 
 argument   := atom
            |  '(' expression ')'
@@ -513,9 +526,11 @@ atom       := NUMBER
            |  BOOLEAN
            |  NULL
            |  IDENTIFIER
+
+EFFECT_IDENT := IDENTIFIER ':'
 ```
 
-**Note:** Special forms (with `:` postfix) don't produce output. Only the final expression produces the program result.
+**Note:** Effects (EFFECT_IDENT) are identifiers followed by `:`. They're regular expressions that don't receive automatic `$$` injection.
 
 ---
 
@@ -540,8 +555,7 @@ Bytecode (.pexb)
 - The normalizer converts pipes to nested parentheses and injects `$$` where needed
 - After normalization, only canonical S-expression tokens exist
 - The parser only sees normalized token streams (no pipes, no semicolons)
-- Special forms (`:` postfix) are compiled as side effects
-- Only the final expression contributes to program output
+- Effects (`:` postfix) are regular expressions that don't get `$$` injection
 - The compiler, VM, and all tools only understand pure S-expressions
 
 ---
@@ -654,7 +668,7 @@ lenses:
       target: email_clean
       expr: lower | trim
 
-  # With special forms
+  # With effects (bindings and functions)
   - transform:
       source: temperature_c
       target: temperature_f
@@ -774,7 +788,7 @@ lenses:
 5. **Implicit when safe** - Auto-inject source, but allow explicit control via parentheses
 6. **First-class functions** - Functions are values
 7. **Compiled to bytecode** - Fast execution, compact storage
-8. **Side effects are explicit** - `:` postfix marks forms that don't produce output
+8. **Effects are expressions** - `:` postfix prevents `$$` auto-injection, effects can appear anywhere
 9. **Operators as identifiers** - Uniform treatment of all callable functions
 
 ---
@@ -835,6 +849,7 @@ Potential additions (not yet implemented):
 **Parsing:**
 - Build AST from normalized token stream (no pipes or semicolons)
 - Parser only sees canonical S-expression structure
+- Effects (EFFECT_IDENT) are parsed as regular identifiers (atoms)
 - Operators are parsed as callable identifiers
 
 **Post-parsing:**
@@ -1003,18 +1018,10 @@ FLAGS      = ("g" | "i" | "m" | "s" | "u" | "v" | "y")* ;
 BOOLEAN    = "true" | "false" ;
 NULL       = "null" ;
 IDENTIFIER = (LETTER | "_" | "$") (LETTER | DIGIT | "_" | "$")* ;
+EFFECT_IDENT = IDENTIFIER ":" ;
 
 (* Syntactic Grammar *)
-program    = special_form* expression ;
-
-special_form = "let:" IDENTIFIER expression
-             | "fn:" IDENTIFIER "(" params ")" expression
-             | "print:" expression
-             | "debug:" expression
-             | "assert:" expression
-             | IDENTIFIER ":" expression ;
-
-params     = [IDENTIFIER ("," IDENTIFIER)*] ;
+program    = expression* ;
 
 expression = pipeline ;
 
@@ -1022,9 +1029,12 @@ pipeline   = primary ("|" primary)* ;
 
 primary    = atom
            | call
+           | effect
            | "(" expression ")" ;
 
 call       = IDENTIFIER argument* ;
+
+effect     = EFFECT_IDENT argument* ;
 
 argument   = atom
            | "(" expression ")" ;

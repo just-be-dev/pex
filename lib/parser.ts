@@ -35,100 +35,17 @@ export class Parser {
   // ============================================
 
   parse(): AST.Program {
-    const statements: AST.EffectStatement[] = [];
-    let expression: AST.SExpr | null = null;
+    const expressions: AST.SExpr[] = [];
 
-    // Parse statements and final expression
+    // Parse all top-level expressions
     while (!this.isAtEnd()) {
-      // Try to parse as effect statement first (special forms with :)
-      if (this.isEffectStatementStart()) {
-        statements.push(this.parseEffectStatement());
-      } else {
-        // Must be the final expression
-        expression = this.parseExpression();
-
-        // After parsing expression, check if there's more
-        // If more special forms follow, that's an error (expression must be last)
-        if (!this.isAtEnd() && this.isEffectStatementStart()) {
-          throw this.error(
-            "Special forms must appear before the final expression",
-            this.peek()
-          );
-        }
-      }
+      expressions.push(this.parseExpression());
     }
 
     return {
       type: "Program",
-      statements,
-      expression,
+      expressions,
     };
-  }
-
-  // ============================================
-  // Effect Statement Parsing
-  // ============================================
-
-  private isEffectStatementStart(): boolean {
-    return this.check(TokenType.EFFECT_IDENT);
-  }
-
-  private parseEffectStatement(): AST.EffectStatement {
-    const effectNameToken = this.consume(
-      TokenType.EFFECT_IDENT,
-      "Expected effect name"
-    );
-    const effectName = String(effectNameToken.value);
-
-    // Parse arguments until we hit another effect or EOF
-    const args: AST.SExpr[] = [];
-
-    while (!this.isAtEnd() && !this.isEffectStatementStart()) {
-      if (this.check(TokenType.EOF)) break;
-
-      // Heuristic: If we've parsed 2+ arguments and the last was a list,
-      // and we now see an atom that's not followed by a paren,
-      // stop to allow for final expression
-      if (
-        args.length >= 2 &&
-        args[args.length - 1]!.type === "List" &&
-        (this.check(TokenType.IDENTIFIER) || this.check(TokenType.SOURCE_REF)) &&
-        !this.checkNext(TokenType.LPAREN)
-      ) {
-        break;
-      }
-
-      // Heuristic: If we've parsed 2+ non-list arguments and the next token
-      // is LPAREN (which starts a new expression), stop to allow for final expression
-      // This handles cases like: let: x 10  (+ x TAX)
-      if (
-        args.length >= 2 &&
-        args[args.length - 1]!.type === "Atom" &&
-        this.check(TokenType.LPAREN)
-      ) {
-        break;
-      }
-
-      // Heuristic: If we've parsed 3+ arguments (typical for fn: name params body)
-      // and the next token is LPAREN, stop to allow for final expression
-      // This handles cases like: fn: foo (x) (+ x 1)  (bar $$)
-      if (args.length >= 3 && this.check(TokenType.LPAREN)) {
-        break;
-      }
-
-      args.push(this.parseExpression());
-    }
-
-    return {
-      type: "EffectStatement",
-      name: effectName,
-      arguments: args,
-    };
-  }
-
-  private checkNext(type: TokenType): boolean {
-    if (this.current + 1 >= this.tokens.length) return false;
-    return this.tokens[this.current + 1]!.type === type;
   }
 
   // ============================================
@@ -220,6 +137,14 @@ export class Parser {
     }
 
     if (this.match(TokenType.IDENTIFIER)) {
+      return {
+        type: "Atom",
+        atomType: "identifier",
+        value: String(token.value),
+      };
+    }
+
+    if (this.match(TokenType.EFFECT_IDENT)) {
       return {
         type: "Atom",
         atomType: "identifier",
