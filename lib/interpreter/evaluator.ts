@@ -2,10 +2,11 @@
  * Tree-walking interpreter for PEX
  */
 
-import type { SExpr, Program, Atom, List } from "../parser/ast.ts";
+import type { SExpr, Program, Atom, List, Pipeline } from "../parser/ast.ts";
 import {
   isAtom,
   isList,
+  isPipeline,
   isIdentifier,
   isEffect,
   isSourceRef,
@@ -76,6 +77,11 @@ export class Evaluator {
     // Handle lists (function calls, special forms, effects)
     if (isList(expr)) {
       return this.evaluateList(expr, env);
+    }
+
+    // Handle pipelines
+    if (isPipeline(expr)) {
+      return this.evaluatePipeline(expr, env);
     }
 
     throw new RuntimeError(`Unknown expression type: ${JSON.stringify(expr)}`);
@@ -196,6 +202,120 @@ export class Evaluator {
         `First element of list must be an identifier or effect, got: ${JSON.stringify(first)}`,
       );
     }
+  }
+
+  /**
+   * Evaluate a pipeline with auto-call semantics
+   * Example: a | b | c
+   * - Evaluate a, auto-call if function
+   * - Pass result to b, auto-call if function
+   * - Pass result to c, auto-call if function
+   */
+  private evaluatePipeline(pipeline: Pipeline, env: Environment): Value {
+    if (pipeline.stages.length === 0) {
+      throw new RuntimeError("Pipeline cannot be empty");
+    }
+
+    // Evaluate first stage
+    let currentValue = this.evaluate(pipeline.stages[0]!, env);
+    currentValue = this.maybeAutoCall(pipeline.stages[0]!, currentValue, env);
+
+    // Process remaining stages
+    for (let i = 1; i < pipeline.stages.length; i++) {
+      const stage = pipeline.stages[i]!;
+
+      // Update pipeline value context
+      const previousPipelineValue = this.context.pipelineValue;
+      this.context.pipelineValue = currentValue;
+
+      // Evaluate stage with input injection
+      currentValue = this.evaluatePipelineStage(stage, env);
+      currentValue = this.maybeAutoCall(stage, currentValue, env);
+
+      // Restore previous pipeline value
+      this.context.pipelineValue = previousPipelineValue;
+    }
+
+    return currentValue;
+  }
+
+  /**
+   * Auto-call logic: if stage is a bare identifier that evaluates to a function, call it
+   */
+  private maybeAutoCall(stage: SExpr, value: Value, env: Environment): Value {
+    // Only auto-call if:
+    // 1. Stage is a bare identifier (not a List/explicit call)
+    // 2. Value is a function
+    if (isIdentifier(stage) && !isSourceRef(stage) && isFunction(value)) {
+      // Call with pipeline value as argument
+      if (value.isBuiltin && value.builtin) {
+        return value.builtin([this.context.pipelineValue]);
+      }
+
+      // User-defined function with 1 parameter
+      if (value.params.length === 1) {
+        const funcEnv = env.extend();
+        funcEnv.define(value.params[0]!, this.context.pipelineValue);
+        if (value.body === null) {
+          throw new RuntimeError("Cannot evaluate function without body");
+        }
+        return this.evaluate(value.body, funcEnv);
+      }
+
+      // If function expects 0 or 2+ params, don't auto-call
+      // Fall through and return the function value
+    }
+
+    return value;
+  }
+
+  /**
+   * Evaluate a pipeline stage with input injection
+   * If stage is a List (explicit call), inject pipeline value as first arg (unless $ is present)
+   */
+  private evaluatePipelineStage(stage: SExpr, env: Environment): Value {
+    // If stage is a List (explicit call), check if we need to inject input
+    if (isList(stage)) {
+      // Check if the list contains $ (pipeline reference)
+      const containsPipelineRef = this.containsPipelineRefInExpr(stage);
+
+      if (!containsPipelineRef) {
+        // No $ present, inject input as first argument
+        if (stage.elements.length === 0) {
+          throw new RuntimeError("Cannot evaluate empty list");
+        }
+
+        const func = stage.elements[0]!;
+        const args = stage.elements.slice(1);
+
+        // Create a new list with input injected as first arg after function
+        const newList: List = {
+          type: "List",
+          elements: [func, { type: "Atom", atomType: "identifier", value: "$" }, ...args],
+        };
+
+        return this.evaluate(newList, env);
+      }
+    }
+
+    // For all other cases (bare identifiers, atoms, or lists with $), just evaluate
+    return this.evaluate(stage, env);
+  }
+
+  /**
+   * Check if an expression contains a pipeline reference ($)
+   */
+  private containsPipelineRefInExpr(expr: SExpr): boolean {
+    if (isAtom(expr) && isPipelineRef(expr)) {
+      return true;
+    }
+    if (isList(expr)) {
+      return expr.elements.some((e) => this.containsPipelineRefInExpr(e));
+    }
+    if (isPipeline(expr)) {
+      return expr.stages.some((s) => this.containsPipelineRefInExpr(s));
+    }
+    return false;
   }
 
   /**

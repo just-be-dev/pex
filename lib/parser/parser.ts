@@ -19,15 +19,25 @@ export class ParseError extends Error {
 }
 
 // ============================================
+// Parser Options
+// ============================================
+
+export interface ParseOptions {
+  shellMode?: boolean;
+}
+
+// ============================================
 // Parser Class
 // ============================================
 
 export class Parser {
   private tokens: Token[];
   private current: number = 0;
+  private options: ParseOptions;
 
-  constructor(tokens: Token[]) {
+  constructor(tokens: Token[], options: ParseOptions = {}) {
     this.tokens = tokens;
+    this.options = options;
   }
 
   // ============================================
@@ -37,9 +47,38 @@ export class Parser {
   parse(): AST.Program {
     const expressions: AST.SExpr[] = [];
 
-    // Parse all top-level expressions
+    // Parse all top-level expressions (semicolons separate expressions)
     while (!this.isAtEnd()) {
-      expressions.push(this.parseExpression());
+      const expr = this.parseExpression();
+      expressions.push(expr);
+
+      // Skip semicolons between expressions
+      while (this.match(TokenType.SEMICOLON)) {
+        // Semicolon consumed
+      }
+    }
+
+    // Shell mode: prepend $$ to last expression if it doesn't contain source refs
+    if (this.options.shellMode && expressions.length > 0) {
+      const lastExpr = expressions[expressions.length - 1]!;
+
+      if (!this.containsSourceRef(lastExpr)) {
+        const programInput = { type: "Atom" as const, atomType: "identifier" as const, value: "$$" };
+
+        if (lastExpr.type === "Pipeline") {
+          // Prepend $$ as first stage: a | b => $$ | a | b
+          expressions[expressions.length - 1] = {
+            type: "Pipeline",
+            stages: [programInput, ...lastExpr.stages],
+          };
+        } else {
+          // Wrap in pipeline: expr => $$ | expr
+          expressions[expressions.length - 1] = {
+            type: "Pipeline",
+            stages: [programInput, lastExpr],
+          };
+        }
+      }
     }
 
     return {
@@ -48,28 +87,143 @@ export class Parser {
     };
   }
 
+  // Helper to check if an expression contains source references ($, $$, $N)
+  private containsSourceRef(expr: AST.SExpr): boolean {
+    if (expr.type === "Atom" && expr.atomType === "identifier") {
+      const name = expr.value as string;
+      return name === "$" || name === "$$" || /^\$\d+$/.test(name);
+    }
+    if (expr.type === "List") {
+      return expr.elements.some(e => this.containsSourceRef(e));
+    }
+    if (expr.type === "Pipeline") {
+      return expr.stages.some(s => this.containsSourceRef(s));
+    }
+    return false;
+  }
+
   // ============================================
   // Expression Parsing
   // ============================================
 
   private parseExpression(): AST.SExpr {
+    return this.parsePipeline();
+  }
+
+  // Parse pipeline: expr | expr | expr
+  private parsePipeline(): AST.SExpr {
+    const stages: AST.SExpr[] = [];
+
+    // Parse first stage
+    stages.push(this.parsePrimary());
+
+    // Parse remaining stages separated by PIPE
+    while (this.match(TokenType.PIPE)) {
+      stages.push(this.parsePrimary());
+    }
+
+    // If only one stage, return it directly (not a pipeline)
+    if (stages.length === 1) {
+      return stages[0]!;
+    }
+
+    // Multiple stages, return a Pipeline node
+    return {
+      type: "Pipeline",
+      stages,
+    };
+  }
+
+  // Parse primary expression: list or implicit call/atom
+  private parsePrimary(): AST.SExpr {
     // List (parenthesized expression)
     if (this.check(TokenType.LPAREN)) {
       return this.parseList();
     }
 
-    // Atom (literal or identifier)
-    return this.parseAtom();
+    // Implicit call or atom
+    return this.parseImplicitCallOrAtom();
   }
 
-  private parseList(): AST.List {
+  // Parse implicit call or atom
+  // In shell mode: collect multiple tokens into an implicit call list
+  // Otherwise: just return a single atom
+  private parseImplicitCallOrAtom(): AST.SExpr {
+    const tokens: AST.SExpr[] = [];
+
+    // Collect tokens until we hit a delimiter
+    while (!this.isAtEnd() && !this.isDelimiter()) {
+      if (this.check(TokenType.LPAREN)) {
+        tokens.push(this.parseList());
+      } else {
+        tokens.push(this.parseAtom());
+      }
+    }
+
+    if (tokens.length === 0) {
+      throw this.error("Expected expression", this.peek());
+    }
+
+    // Single token - check if we should wrap it
+    if (tokens.length === 1) {
+      const token = tokens[0]!;
+
+      // In shell mode, wrap single identifiers in a List (implicit call)
+      if (this.options.shellMode && token.type === "Atom" && token.atomType === "identifier") {
+        return {
+          type: "List",
+          elements: [token],
+        };
+      }
+
+      // Otherwise, return as-is
+      return token;
+    }
+
+    // Multiple tokens - wrap in a List (implicit call)
+    return {
+      type: "List",
+      elements: tokens,
+    };
+  }
+
+  // Check if current token is a delimiter (stops implicit call parsing)
+  private isDelimiter(): boolean {
+    const type = this.peek().type;
+    return (
+      type === TokenType.PIPE ||
+      type === TokenType.RPAREN ||
+      type === TokenType.SEMICOLON
+    );
+  }
+
+  private parseList(): AST.SExpr {
     this.consume(TokenType.LPAREN, "Expected '('");
 
-    const elements: AST.SExpr[] = [];
+    // Check for empty list
+    if (this.check(TokenType.RPAREN)) {
+      this.advance();
+      return { type: "List", elements: [] };
+    }
 
-    // Parse elements until we hit the closing paren
+    // Check if there are pipes at this level
+    // If yes, parse as pipeline
+    // If no, parse as list of elements
+    if (this.hasPipeAtCurrentLevel()) {
+      // Parse as pipeline
+      const pipeline = this.parsePipeline();
+      this.consume(TokenType.RPAREN, "Expected ')' after pipeline");
+      return pipeline;
+    }
+
+    // No pipes, parse as list of space-separated elements
+    const elements: AST.SExpr[] = [];
     while (!this.check(TokenType.RPAREN) && !this.isAtEnd()) {
-      elements.push(this.parseExpression());
+      if (this.check(TokenType.LPAREN)) {
+        elements.push(this.parseList());
+      } else {
+        elements.push(this.parseAtom());
+      }
     }
 
     this.consume(TokenType.RPAREN, "Expected ')' after list elements");
@@ -78,6 +232,32 @@ export class Parser {
       type: "List",
       elements,
     };
+  }
+
+  // Check if there's a pipe at the current level (not inside nested parens)
+  private hasPipeAtCurrentLevel(): boolean {
+    let depth = 0;
+    let i = this.current;
+
+    while (i < this.tokens.length) {
+      const token = this.tokens[i]!;
+
+      if (token.type === TokenType.LPAREN) {
+        depth++;
+      } else if (token.type === TokenType.RPAREN) {
+        if (depth === 0) {
+          // Reached the closing paren of current list
+          return false;
+        }
+        depth--;
+      } else if (token.type === TokenType.PIPE && depth === 0) {
+        return true;
+      }
+
+      i++;
+    }
+
+    return false;
   }
 
   private parseAtom(): AST.Atom {
@@ -217,7 +397,7 @@ export class Parser {
 // Convenience Function
 // ============================================
 
-export function parse(tokens: Token[]): AST.Program {
-  const parser = new Parser(tokens);
+export function parse(tokens: Token[], options: ParseOptions = {}): AST.Program {
+  const parser = new Parser(tokens, options);
   return parser.parse();
 }

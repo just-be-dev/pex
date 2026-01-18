@@ -32,10 +32,19 @@ export interface List {
 }
 
 // ============================================
+// Pipeline
+// ============================================
+
+export interface Pipeline {
+  type: "Pipeline";
+  stages: SExpr[];
+}
+
+// ============================================
 // S-Expression Union
 // ============================================
 
-export type SExpr = Atom | List;
+export type SExpr = Atom | List | Pipeline;
 
 // ============================================
 // Program Node
@@ -56,6 +65,10 @@ export function isAtom(expr: SExpr): expr is Atom {
 
 export function isList(expr: SExpr): expr is List {
   return expr.type === "List";
+}
+
+export function isPipeline(expr: SExpr): expr is Pipeline {
+  return expr.type === "Pipeline";
 }
 
 export function isIdentifier(expr: SExpr): expr is Atom {
@@ -80,6 +93,10 @@ export function atom(atomType: AtomType, value: AtomValue, raw?: string): Atom {
 
 export function list(...elements: SExpr[]): List {
   return { type: "List", elements };
+}
+
+export function pipeline(...stages: SExpr[]): Pipeline {
+  return { type: "Pipeline", stages };
 }
 
 // ============================================
