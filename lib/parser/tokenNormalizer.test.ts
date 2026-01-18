@@ -20,9 +20,10 @@ const expectNormalized = (source: string, expected: string, options?: { shellMod
 describe("Token Normalizer", () => {
   describe("Implicit calls", () => {
     test("wraps bare identifier in parens (no $$ injection without options)", () => {
+      // In normal mode, single identifiers are NOT wrapped (they're value references)
       expectNormalized(
         "lower",
-        "(lower)"
+        "lower"
       );
     });
 
@@ -45,35 +46,35 @@ describe("Token Normalizer", () => {
     test("normalizes simple pipe (no $$ injection without options)", () => {
       expectNormalized(
         "a | b",
-        "(b a)"
+        "(b (a))"
       );
     });
 
     test("normalizes three-stage pipeline (no $$ injection without options)", () => {
       expectNormalized(
         "a | b | c",
-        "(c b a)"
+        "(c (b (a)))"
       );
     });
 
     test("normalizes pipe with function call (no $$ injection without options)", () => {
       expectNormalized(
         'a | split " "',
-        '(split a " ")'
+        '(split (a) " ")'
       );
     });
 
     test("normalizes pipes inside parens", () => {
       expectNormalized(
         "(a | b)",
-        "(b a)"
+        "(b (a))"
       );
     });
 
     test("normalizes nested pipes at multiple depths", () => {
       expectNormalized(
         "(a | b) | c",
-        "(c b a)"
+        "(c (b (a)))"
       );
 
       // Also verify no PIPE tokens remain
@@ -86,32 +87,36 @@ describe("Token Normalizer", () => {
 
   describe("Semicolon normalization", () => {
     test("splits at semicolon (no $$ injection without options)", () => {
+      // In normal mode, single identifiers are NOT wrapped
       expectNormalized(
         "a; b",
-        "(a) (b)"
+        "a b"
       );
     });
 
     test("splits multiple semicolons (no $$ injection without options)", () => {
+      // In normal mode, single identifiers are NOT wrapped
       expectNormalized(
         "a; b; c",
-        "(a) (b) (c)"
+        "a b c"
       );
     });
 
     test("handles semicolon with function calls (no $$ injection without options)", () => {
+      // Function call is wrapped, but single identifier is not
       expectNormalized(
         'split " "; lower',
-        '(split " ") (lower)'
+        '(split " ") lower'
       );
     });
   });
 
   describe("$$-injection", () => {
     test("does not inject $$ without options", () => {
+      // In normal mode, single identifiers are NOT wrapped
       expectNormalized(
         "lower",
-        "(lower)"
+        "lower"
       );
     });
 
@@ -146,10 +151,12 @@ describe("Token Normalizer", () => {
     });
 
     test("no injection into explicit parens without options", () => {
-      // Parens around single identifiers with no args are simplified
+      // Explicit parens are preserved
+      // (foo (bar)) means: call foo with result of calling bar
+      // NOT the same as (foo bar) which means: call foo with variable bar
       expectNormalized(
         "(foo (bar))",
-        "(foo bar)"
+        "(foo (bar))"
       );
 
       // Verify no SOURCE_REF tokens exist
@@ -396,7 +403,8 @@ describe("Token Normalizer", () => {
       const printed = print(normalized);
 
       // No $$ in any expression
-      expect(printed).toBe("(a) (b)");
+      // In normal mode, single identifiers are NOT wrapped
+      expect(printed).toBe("a b");
     });
 
     test("shell mode with pipelines injects only in last group", () => {
@@ -404,8 +412,9 @@ describe("Token Normalizer", () => {
       const normalized = normalizeTokens(tokens, { shellMode: true });
       const printed = print(normalized);
 
-      // Only second pipeline should get $$
-      expect(printed).toBe("(b a) (d c $$)");
+      // Pipelines create nested structures
+      // Only second pipeline (last group) should get $$
+      expect(printed).toBe("(b (a)) (d (c $$))");
     });
 
     test("single expression with shellMode gets $$ injection", () => {

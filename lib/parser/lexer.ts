@@ -342,6 +342,7 @@ export class Lexer {
     if (this.peek() === ":") {
       this.advance(); // consume the colon
       raw = value + ":";
+      tokenValue = value;  // Value without colon, raw includes colon
       type = TokenType.EFFECT_IDENT;
     } else {
       // Check for keywords
@@ -421,27 +422,45 @@ export class Lexer {
   private isOperandPosition(): boolean {
     const lastToken = this.tokens[this.tokens.length - 1];
 
-    // At start of input
-    if (!lastToken) return true;
+    // At start of input, need to look ahead to distinguish / identifier from /regex/
+    if (!lastToken) {
+      return this.looksLikeRegex();
+    }
 
-    // After these tokens, we expect an operand (value)
-    const operandStarters = [
+    // After these tokens, we could have either / operator or /regex/
+    // Need to look ahead to distinguish
+    const ambiguousStarters = [
       TokenType.LPAREN,
       TokenType.PIPE,
       TokenType.COMMA,
       TokenType.SEMICOLON,
       TokenType.EFFECT_IDENT,
     ];
-    if (operandStarters.includes(lastToken.type)) return true;
+    if (ambiguousStarters.includes(lastToken.type)) {
+      return this.looksLikeRegex();
+    }
 
-    // An identifier preceded by an operand starter is in argument position,
-    // so another operand (like a regex) can follow
+    // After a literal value, we're definitely expecting another operand (argument)
+    // so / must be starting a regex
+    const literalTypes = [
+      TokenType.STRING,
+      TokenType.NUMBER,
+      TokenType.BOOLEAN,
+      TokenType.NULL,
+      TokenType.REGEX,
+      TokenType.SOURCE_REF,
+    ];
+    if (literalTypes.includes(lastToken.type)) return true;
+
+    // After an identifier in argument position, another value can follow
     if (lastToken.type === TokenType.IDENTIFIER) {
       const secondLastToken = this.tokens[this.tokens.length - 2];
       const argPositionStarters = [
         TokenType.EFFECT_IDENT,
         TokenType.COMMA,
         TokenType.LPAREN,
+        TokenType.PIPE,
+        TokenType.SEMICOLON,
       ];
       if (secondLastToken && argPositionStarters.includes(secondLastToken.type)) {
         return true;
@@ -449,6 +468,59 @@ export class Lexer {
     }
 
     return false;
+  }
+
+  /**
+   * Look ahead to see if / starts a regex literal or is the division operator
+   */
+  private looksLikeRegex(): boolean {
+    // Save position
+    const savedPos = this.position;
+    const savedLine = this.line;
+    const savedCol = this.column;
+
+    // Skip the /
+    this.position++;
+
+    let hasContent = false;
+    let foundClosing = false;
+
+    // Look for closing / (handling escapes)
+    while (this.position < this.source.length) {
+      const char = this.peek();
+
+      if (char === "\n") {
+        // Regex can't span lines
+        break;
+      }
+
+      if (char === "\\") {
+        // Escape sequence - skip next char
+        this.position++;
+        if (this.position < this.source.length) {
+          this.position++;
+          hasContent = true;
+        }
+      } else if (char === "/") {
+        // Found closing /
+        foundClosing = true;
+        break;
+      } else if (char === " " && !hasContent) {
+        // Leading space after / suggests it's a division operator
+        break;
+      } else {
+        this.position++;
+        hasContent = true;
+      }
+    }
+
+    // Restore position
+    this.position = savedPos;
+    this.line = savedLine;
+    this.column = savedCol;
+
+    // It's a regex if we have content (even without closing /, which will throw error)
+    return hasContent;
   }
 }
 

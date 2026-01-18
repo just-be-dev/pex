@@ -307,35 +307,53 @@ describe("Parser", () => {
   describe("Normalization", () => {
     test("normalizes simple pipeline to nested calls", () => {
       const ast = parseAndNormalize("a | b");
-      // a | b -> (b a $$)
+      // a | b -> (b (a $$))
       expect(ast.expressions[0]?.type).toBe("List");
       const list = ast.expressions[0] as AST.List;
       expect((list.elements[0] as AST.Atom).value).toBe("b");
-      expect(list.elements).toHaveLength(3);
-      expect((list.elements[1] as AST.Atom).value).toBe("a");
-      expect(AST.isProgramInput(list.elements[2] as AST.Atom)).toBe(true);
+      expect(list.elements).toHaveLength(2);
+      // Second element should be nested: (a $$)
+      expect(list.elements[1]?.type).toBe("List");
+      const nested = list.elements[1] as AST.List;
+      expect((nested.elements[0] as AST.Atom).value).toBe("a");
+      expect(nested.elements).toHaveLength(2);
+      // Second element of nested should be $$
+      expect(AST.isProgramInput(nested.elements[1] as AST.Atom)).toBe(true);
     });
 
     test("normalizes multi-stage pipeline", () => {
       const ast = parseAndNormalize("a | b | c");
-      // a | b | c -> (c b a $$)
+      // a | b | c -> (c (b (a $$)))
       const list = ast.expressions[0] as AST.List;
       expect((list.elements[0] as AST.Atom).value).toBe("c");
-      expect(list.elements).toHaveLength(4);
-      expect((list.elements[1] as AST.Atom).value).toBe("b");
-      expect((list.elements[2] as AST.Atom).value).toBe("a");
-      expect(AST.isProgramInput(list.elements[3] as AST.Atom)).toBe(true);
+      expect(list.elements).toHaveLength(2);
+      // Second element should be nested: (b (a $$))
+      expect(list.elements[1]?.type).toBe("List");
+      const nested = list.elements[1] as AST.List;
+      expect((nested.elements[0] as AST.Atom).value).toBe("b");
+      expect(nested.elements).toHaveLength(2);
+      expect(nested.elements[1]?.type).toBe("List");
+      // Check that the innermost (a $$) has $$
+      const innermost = nested.elements[1] as AST.List;
+      expect((innermost.elements[0] as AST.Atom).value).toBe("a");
+      expect(AST.isProgramInput(innermost.elements[1] as AST.Atom)).toBe(true);
     });
 
     test("normalizes pipeline with call stage", () => {
       const ast = parseAndNormalize('a | split " "');
-      // a | split " " -> (split a $$ " ")
+      // a | split " " -> (split (a $$) " ")
       const list = ast.expressions[0] as AST.List;
       expect((list.elements[0] as AST.Atom).value).toBe("split");
-      expect(list.elements).toHaveLength(4);
-      expect((list.elements[1] as AST.Atom).value).toBe("a");
-      expect(AST.isProgramInput(list.elements[2] as AST.Atom)).toBe(true);
-      expect((list.elements[3] as AST.Atom).value).toBe(" ");
+      expect(list.elements).toHaveLength(3);
+      // Second element should be nested: (a $$)
+      expect(list.elements[1]?.type).toBe("List");
+      const nested = list.elements[1] as AST.List;
+      expect((nested.elements[0] as AST.Atom).value).toBe("a");
+      expect(nested.elements).toHaveLength(2);
+      // $$ should be inside nested call
+      expect(AST.isProgramInput(nested.elements[1] as AST.Atom)).toBe(true);
+      // Third element should be the string arg
+      expect((list.elements[2] as AST.Atom).value).toBe(" ");
     });
 
     test("auto-injects $$ for bare identifier", () => {
@@ -381,13 +399,15 @@ describe("Parser", () => {
 
     test("normalizes pipeline in effect body", () => {
       const ast = parseAndNormalize("fn: normalize (email) (email | lower | trim)");
-      // With effects as expressions, this parses as a List: (fn normalize (email) (trim lower email))
+      // With effects and shell mode, parses as: (fn $$ normalize (email) (trim (lower (email))))
       expect(ast.expressions[0]?.type).toBe("List");
       const list = ast.expressions[0] as AST.List;
       // First element is fn (without colon in value)
       expect((list.elements[0] as AST.Atom).value).toBe("fn");
-      // Body should be normalized (trim lower email)
-      const body = list.elements[3] as AST.List;
+      // Second element is $$ (injected in shell mode)
+      expect((list.elements[1] as AST.Atom).type).toBe("Atom");
+      // Body should be normalized and at element[4]
+      const body = list.elements[4] as AST.List;
       expect((body.elements[0] as AST.Atom).value).toBe("trim");
     });
   });
