@@ -148,7 +148,12 @@ split $$ " " | (if (> (len $) 2) $ [$$])
 join $0 " " $1   ;; $0 and $1 are elements of $$
 ```
 
-**Auto-injection Rule:** If neither `$` nor `$$` appears in the expression, `$$` is automatically injected as the first argument.
+**Auto-injection Rule:** If neither `$` nor `$$` appears in the expression, `$$` is automatically injected as the first argument. However, auto-injection only happens with implicitly-added parentheses, not with explicit parentheses written in the source code. This allows precise control over when the program input is used.
+
+**Explicit vs Implicit Parentheses:**
+- `foo bar` → `(foo $$ bar)` — implicit parens added by normalizer, so `$$` is injected
+- `(foo bar)` → `(foo bar)` — explicit parens from source, no `$$` injection
+- Effect statements (`let:`, `fn:`, etc.) never get `$$` injected
 
 ### Understanding `$` vs `$$`
 
@@ -195,21 +200,21 @@ join $0 " " $1
 
 ---
 
-## Desugaring
+## Normalization (Token-Level Desugaring)
 
-Pex syntax desugars to pure S-expressions early in compilation:
+Pex syntax is normalized to pure S-expressions **before parsing**. The normalizer operates on the token stream:
 
 ```lisp
 ;; Source
 let: x 10
 x | double | add_ten
 
-;; Desugared to canonical S-expressions
-(let x 10)
+;; Normalized tokens (what the parser sees)
+(let: x 10)
 (add_ten (double x))
 ```
 
-**Pipeline desugaring:**
+**Pipeline normalization:**
 ```
 a | b       →  (b a)
 a | b | c   →  (c (b a))
@@ -227,12 +232,28 @@ if $$ "yes" "no"          →  (if $$ "yes" "no")
 split " " | (len $)       →  (len (split " "))
 ```
 
-**Special forms desugar to S-expressions:**
+**Explicit parentheses prevent auto-injection:**
+```
+(foo bar)     →  (foo bar)      # No $$ injected - explicit parens
+foo bar       →  (foo $$ bar)   # $$ injected - implicit parens
+```
+
+**Parentheses simplification:**
+```
+((expr))      →  (expr)         # Remove redundant nesting
+(foo (bar))   →  (foo bar)      # Remove parens around single identifier when nested
+(bar)         →  (bar)          # Keep top-level parens (prevents spurious $$ injection)
+```
+
+**Special forms normalize to S-expressions:**
 ```
 let: x 10   →  (let x 10)
 fn: f (x) body  →  (fn f (params x) body)
 print: "hello"  →  (print "hello")
 ```
+
+**Operator tokenization:**
+All arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`==`, `!=`, `<`, `>`, `<=`, `>=`), and logical operators (`and`, `or`, `not`, `??`) are tokenized as regular identifiers, not special operator tokens. This allows them to be treated uniformly as callable functions.
 
 ---
 
@@ -505,17 +526,20 @@ Source Code (.pex)
     ↓
 Tokenize (recognize |, :, etc.)
     ↓
-Parse (build AST with sugar)
+Normalize (convert to canonical S-expressions BEFORE parsing)
     ↓
-Desugar (convert to canonical S-expressions)
+Parse (build AST from normalized tokens)
     ↓
 Compile (generate bytecode)
     ↓
 Bytecode (.pexb)
 ```
 
-**Key invariants:** 
-- After desugaring, only canonical S-expressions exist
+**Key invariants:**
+- Normalization happens BEFORE parsing, not after
+- The normalizer converts pipes to nested parentheses and injects `$$` where needed
+- After normalization, only canonical S-expression tokens exist
+- The parser only sees normalized token streams (no pipes, no semicolons)
 - Special forms (`:` postfix) are compiled as side effects
 - Only the final expression contributes to program output
 - The compiler, VM, and all tools only understand pure S-expressions
@@ -745,12 +769,13 @@ lenses:
 
 1. **Minimal syntax** - Only essential operators
 2. **S-expressions at core** - Uniform internal representation
-3. **Desugar early** - Convert to canonical form immediately after parsing
-4. **Pipes for readability** - But they're just sugar
-5. **Implicit when safe** - Auto-inject source, but allow explicit control
+3. **Normalize before parsing** - Convert to canonical form before building the AST
+4. **Pipes for readability** - But they're just syntactic sugar
+5. **Implicit when safe** - Auto-inject source, but allow explicit control via parentheses
 6. **First-class functions** - Functions are values
 7. **Compiled to bytecode** - Fast execution, compact storage
 8. **Side effects are explicit** - `:` postfix marks forms that don't produce output
+9. **Operators as identifiers** - Uniform treatment of all callable functions
 
 ---
 
@@ -793,11 +818,27 @@ Potential additions (not yet implemented):
 
 ## Implementation Notes
 
-### Parser Implementation
-- Recognize pipes and semicolons during tokenization
-- Build AST with syntactic sugar preserved
-- Desugar immediately after parsing
-- All subsequent phases work with pure S-expressions
+### Implementation Architecture
+
+**Tokenization:**
+- Recognize pipes (`|`), semicolons (`;`), and effect identifiers (`:` postfix)
+- Treat all arithmetic and logical operators as `IDENTIFIER` tokens
+- Distinguish regex literals from division using context-aware lexing
+
+**Normalization (BEFORE parsing):**
+- Convert pipes to nested parentheses: `a | b | c` → `(c (b a))`
+- Split at semicolons into independent expression groups
+- Inject `$$` as first argument when no source refs present (respecting explicit parentheses)
+- Simplify redundant parentheses around single identifiers when nested
+- Mark implicitly-added parentheses as "synthetic" to control auto-injection
+
+**Parsing:**
+- Build AST from normalized token stream (no pipes or semicolons)
+- Parser only sees canonical S-expression structure
+- Operators are parsed as callable identifiers
+
+**Post-parsing:**
+- All subsequent phases work with pure S-expressions via the AST
 
 ### Compiler Optimization Opportunities
 - Constant folding: `(+ 1 2)` → `3`
