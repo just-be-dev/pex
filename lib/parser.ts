@@ -147,7 +147,7 @@ export class Parser {
     if (this.match(TokenType.EFFECT_IDENT)) {
       return {
         type: "Atom",
-        atomType: "identifier",
+        atomType: "effect",
         value: String(token.value),
       };
     }

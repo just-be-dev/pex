@@ -257,38 +257,50 @@ describe("Parser", () => {
     test("parses let effect as expression", () => {
       const ast = parseSource("let: x 10");
       expect(ast.expressions[0]?.type).toBe("Atom");
+      const atom = ast.expressions[0] as AST.Atom;
+      expect(atom.atomType).toBe("effect");
       // EFFECT_IDENT tokens have value without the colon
-      expect((ast.expressions[0] as AST.Atom).value).toBe("let");
+      expect(atom.value).toBe("let");
     });
 
     test("parses fn effect as expression", () => {
       const ast = parseSource("fn: double (x) (* x 2)");
       expect(ast.expressions[0]?.type).toBe("Atom");
-      expect((ast.expressions[0] as AST.Atom).value).toBe("fn");
+      const atom = ast.expressions[0] as AST.Atom;
+      expect(atom.atomType).toBe("effect");
+      expect(atom.value).toBe("fn");
     });
 
     test("parses print effect as expression", () => {
       const ast = parseSource('print: "hello"');
       expect(ast.expressions[0]?.type).toBe("Atom");
-      expect((ast.expressions[0] as AST.Atom).value).toBe("print");
+      const atom = ast.expressions[0] as AST.Atom;
+      expect(atom.atomType).toBe("effect");
+      expect(atom.value).toBe("print");
     });
 
     test("parses debug effect as expression", () => {
       const ast = parseSource("debug: $$");
       expect(ast.expressions[0]?.type).toBe("Atom");
-      expect((ast.expressions[0] as AST.Atom).value).toBe("debug");
+      const atom = ast.expressions[0] as AST.Atom;
+      expect(atom.atomType).toBe("effect");
+      expect(atom.value).toBe("debug");
     });
 
     test("parses assert effect as expression", () => {
       const ast = parseSource("assert: (> x 0)");
       expect(ast.expressions[0]?.type).toBe("Atom");
-      expect((ast.expressions[0] as AST.Atom).value).toBe("assert");
+      const atom = ast.expressions[0] as AST.Atom;
+      expect(atom.atomType).toBe("effect");
+      expect(atom.value).toBe("assert");
     });
 
     test("parses custom effect as expression", () => {
       const ast = parseSource('custom_effect: arg1 "arg2" 123');
       expect(ast.expressions[0]?.type).toBe("Atom");
-      expect((ast.expressions[0] as AST.Atom).value).toBe("custom_effect");
+      const atom = ast.expressions[0] as AST.Atom;
+      expect(atom.atomType).toBe("effect");
+      expect(atom.value).toBe("custom_effect");
     });
   });
 
@@ -429,6 +441,49 @@ describe("Parser", () => {
         expect(e).toBeInstanceOf(ParseError);
         expect((e as ParseError).line).toBe(1);
       }
+    });
+  });
+
+  describe("AST Type Guards", () => {
+    test("isEffect identifies effect atoms", () => {
+      const ast = parseSource("let: x 10");
+      const atom = ast.expressions[0] as AST.Atom;
+      expect(AST.isEffect(atom)).toBe(true);
+      expect(AST.isIdentifier(atom)).toBe(false);
+      expect(AST.isLiteral(atom)).toBe(false);
+    });
+
+    test("isEffect returns false for identifiers", () => {
+      const ast = parseSource("foo");
+      const atom = ast.expressions[0] as AST.Atom;
+      expect(AST.isEffect(atom)).toBe(false);
+      expect(AST.isIdentifier(atom)).toBe(true);
+    });
+
+    test("isEffect returns false for literals", () => {
+      const ast = parseSource("42");
+      const atom = ast.expressions[0] as AST.Atom;
+      expect(AST.isEffect(atom)).toBe(false);
+      expect(AST.isLiteral(atom)).toBe(true);
+    });
+
+    test("isLiteral excludes effects", () => {
+      const effectAst = parseSource("print: x");
+      const effectAtom = effectAst.expressions[0] as AST.Atom;
+      expect(AST.isLiteral(effectAtom)).toBe(false);
+    });
+
+    test("isLiteral includes numbers, strings, booleans, null, regex", () => {
+      expect(AST.isLiteral(AST.atom("number", 42))).toBe(true);
+      expect(AST.isLiteral(AST.atom("string", "hello"))).toBe(true);
+      expect(AST.isLiteral(AST.atom("boolean", true))).toBe(true);
+      expect(AST.isLiteral(AST.atom("null", null))).toBe(true);
+      expect(AST.isLiteral(AST.atom("regex", /test/))).toBe(true);
+    });
+
+    test("isLiteral excludes identifiers and effects", () => {
+      expect(AST.isLiteral(AST.atom("identifier", "foo"))).toBe(false);
+      expect(AST.isLiteral(AST.atom("effect", "let"))).toBe(false);
     });
   });
 
