@@ -1,171 +1,123 @@
 // ============================================
-// Source Location Tracking
+// S-Expression Based AST
 // ============================================
-
-export interface SourceLocation {
-  line: number;
-  column: number;
-}
-
-export interface SourceSpan {
-  start: SourceLocation;
-  end: SourceLocation;
-}
+//
+// This AST represents the parsed program as s-expressions.
+// The token normalizer already converts syntax like pipelines
+// and implicit calls into s-expression form at the token level.
+// This AST is a simple, structured representation of those s-expressions.
 
 // ============================================
-// Base Node Interface
+// Atom Types
 // ============================================
 
-interface BaseNode {
-  type: string;
-  span: SourceSpan;
-}
+export type AtomValue = string | number | boolean | null | RegExp;
 
-// ============================================
-// Literal Nodes
-// ============================================
+export type AtomType = "number" | "string" | "boolean" | "null" | "regex" | "identifier";
 
-export interface NumberLiteral extends BaseNode {
-  type: "NumberLiteral";
-  value: number;
-  raw: string;
-}
-
-export interface StringLiteral extends BaseNode {
-  type: "StringLiteral";
-  value: string;
-  raw: string;
-}
-
-export interface RegexLiteral extends BaseNode {
-  type: "RegexLiteral";
-  pattern: string;
-  flags: string;
-  raw: string;
-}
-
-export interface BooleanLiteral extends BaseNode {
-  type: "BooleanLiteral";
-  value: boolean;
-}
-
-export interface NullLiteral extends BaseNode {
-  type: "NullLiteral";
+export interface Atom {
+  type: "Atom";
+  atomType: AtomType;
+  value: AtomValue;
+  raw?: string; // Original source representation (for literals)
 }
 
 // ============================================
-// Identifier Node
+// List (S-Expression)
 // ============================================
 
-export interface Identifier extends BaseNode {
-  type: "Identifier";
-  name: string;
-  // Special identifiers: $, $$, $0, $1, etc.
-  isSourceRef: boolean; // true for $, $$, $N
-  isPipelineRef: boolean; // true for $
-  isProgramInput: boolean; // true for $$
-  arrayIndex?: number; // defined for $0, $1, etc.
+export interface List {
+  type: "List";
+  elements: SExpr[];
 }
 
 // ============================================
-// Expression Nodes
+// S-Expression Union
 // ============================================
 
-// Represents a function/operator call: `lower email` or `+ x 2`
-export interface CallExpression extends BaseNode {
-  type: "CallExpression";
-  callee: Identifier; // function name or operator
-  arguments: Expression[];
-}
-
-// Represents conditional: `if condition thenExpr elseExpr`
-export interface IfExpression extends BaseNode {
-  type: "IfExpression";
-  condition: Expression;
-  consequent: Expression;
-  alternate: Expression;
-}
-
-// Represents grouping: `( expression )`
-export interface GroupExpression extends BaseNode {
-  type: "GroupExpression";
-  expression: Expression;
-}
-
-// Union of all expression types
-export type Expression =
-  | NumberLiteral
-  | StringLiteral
-  | RegexLiteral
-  | BooleanLiteral
-  | NullLiteral
-  | Identifier
-  | CallExpression
-  | IfExpression
-  | GroupExpression;
+export type SExpr = Atom | List;
 
 // ============================================
-// Statement Nodes (Effects - Generic Special Forms)
+// Effect Statement
 // ============================================
 
-// Generic effect statement: `effect_name: arg1 arg2 ...`
-// Examples: `let: x 10`, `fn: double (x) * x 2`, `print: expr`
-export interface EffectStatement extends BaseNode {
+// Effect statements are special forms that appear before the main expression
+// Examples: let: x 10, fn: double (x) * x 2
+export interface EffectStatement {
   type: "EffectStatement";
-  name: string; // The effect name (e.g., "let", "fn", "print", "debug", "assert")
-  arguments: Expression[]; // All arguments to the effect
+  name: string;
+  arguments: SExpr[];
 }
-
-// Union of all statement types (just one now, but kept for extensibility)
-export type Statement = EffectStatement;
 
 // ============================================
 // Program Node
 // ============================================
 
-export interface Program extends BaseNode {
+export interface Program {
   type: "Program";
-  statements: Statement[]; // Special forms (bindings, definitions)
-  expression: Expression | null; // The final expression (program output)
+  statements: EffectStatement[]; // Special forms (let, fn, etc.)
+  expression: SExpr | null; // The final expression (program output)
 }
 
 // ============================================
-// Node Type Guard Helpers
+// Type Guards
 // ============================================
 
-export type ASTNode = Program | Statement | Expression;
-
-export function isExpression(node: ASTNode): node is Expression {
-  return [
-    "NumberLiteral",
-    "StringLiteral",
-    "RegexLiteral",
-    "BooleanLiteral",
-    "NullLiteral",
-    "Identifier",
-    "CallExpression",
-    "IfExpression",
-    "GroupExpression",
-  ].includes(node.type);
+export function isAtom(expr: SExpr): expr is Atom {
+  return expr.type === "Atom";
 }
 
-export function isStatement(node: ASTNode): node is Statement {
-  return node.type === "EffectStatement";
+export function isList(expr: SExpr): expr is List {
+  return expr.type === "List";
 }
 
-export function isLiteral(
-  node: ASTNode
-): node is
-  | NumberLiteral
-  | StringLiteral
-  | RegexLiteral
-  | BooleanLiteral
-  | NullLiteral {
-  return [
-    "NumberLiteral",
-    "StringLiteral",
-    "RegexLiteral",
-    "BooleanLiteral",
-    "NullLiteral",
-  ].includes(node.type);
+export function isIdentifier(expr: SExpr): expr is Atom {
+  return isAtom(expr) && expr.atomType === "identifier";
+}
+
+export function isLiteral(expr: SExpr): expr is Atom {
+  return isAtom(expr) && expr.atomType !== "identifier";
+}
+
+// ============================================
+// Helper Constructors
+// ============================================
+
+export function atom(atomType: AtomType, value: AtomValue, raw?: string): Atom {
+  return { type: "Atom", atomType, value, raw };
+}
+
+export function list(...elements: SExpr[]): List {
+  return { type: "List", elements };
+}
+
+// ============================================
+// Special Identifier Helpers
+// ============================================
+
+// Helper to check if an identifier is a source reference ($, $$, $0, $1, etc.)
+export function isSourceRef(expr: SExpr): expr is Atom {
+  if (!isIdentifier(expr)) return false;
+  const name = expr.value as string;
+  return name === "$" || name === "$$" || /^\$\d+$/.test(name);
+}
+
+export function isPipelineRef(expr: SExpr): expr is Atom {
+  return isIdentifier(expr) && expr.value === "$";
+}
+
+export function isProgramInput(expr: SExpr): expr is Atom {
+  return isIdentifier(expr) && expr.value === "$$";
+}
+
+export function isArrayRef(expr: SExpr): expr is Atom {
+  if (!isIdentifier(expr)) return false;
+  const name = expr.value as string;
+  return /^\$\d+$/.test(name);
+}
+
+export function getArrayIndex(expr: SExpr): number | undefined {
+  if (!isArrayRef(expr)) return undefined;
+  const name = expr.value as string;
+  return parseInt(name.slice(1), 10);
 }
