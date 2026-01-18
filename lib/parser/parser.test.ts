@@ -1,19 +1,16 @@
 import { describe, test, expect } from "bun:test";
 import { tokenize } from "./lexer.ts";
 import { parse, ParseError } from "./parser.ts";
-import { normalizeTokens } from "./tokenNormalizer.ts";
 import * as AST from "./ast.ts";
 
 // Helper to parse source code
 const parseSource = (source: string) => parse(tokenize(source));
 
-// Helper to get normalized and parsed expression
-// Order: tokenize -> normalize tokens -> parse
+// Helper to parse with shell mode
 // Uses shellMode by default for backward compatibility with existing tests
-const parseAndNormalize = (source: string) => {
+const parseWithShellMode = (source: string) => {
   const tokens = tokenize(source);
-  const normalizedTokens = normalizeTokens(tokens, { shellMode: true });
-  const ast = parse(normalizedTokens);
+  const ast = parse(tokens, { shellMode: true });
   return ast;
 };
 
@@ -256,8 +253,11 @@ describe("Parser", () => {
   describe("Effects (as expressions)", () => {
     test("parses let effect as expression", () => {
       const ast = parseSource("let: x 10");
-      expect(ast.expressions[0]?.type).toBe("Atom");
-      const atom = ast.expressions[0] as AST.Atom;
+      // Effects with arguments are now implicit calls (Lists)
+      expect(ast.expressions[0]?.type).toBe("List");
+      const list = ast.expressions[0] as AST.List;
+      expect(list.elements).toHaveLength(3);
+      const atom = list.elements[0] as AST.Atom;
       expect(atom.atomType).toBe("effect");
       // EFFECT_IDENT tokens have value without the colon
       expect(atom.value).toBe("let");
@@ -265,144 +265,148 @@ describe("Parser", () => {
 
     test("parses fn effect as expression", () => {
       const ast = parseSource("fn: double (x) (* x 2)");
-      expect(ast.expressions[0]?.type).toBe("Atom");
-      const atom = ast.expressions[0] as AST.Atom;
+      // Effects with arguments are now implicit calls (Lists)
+      expect(ast.expressions[0]?.type).toBe("List");
+      const list = ast.expressions[0] as AST.List;
+      const atom = list.elements[0] as AST.Atom;
       expect(atom.atomType).toBe("effect");
       expect(atom.value).toBe("fn");
     });
 
     test("parses print effect as expression", () => {
       const ast = parseSource('print: "hello"');
-      expect(ast.expressions[0]?.type).toBe("Atom");
-      const atom = ast.expressions[0] as AST.Atom;
+      // Effects with arguments are now implicit calls (Lists)
+      expect(ast.expressions[0]?.type).toBe("List");
+      const list = ast.expressions[0] as AST.List;
+      const atom = list.elements[0] as AST.Atom;
       expect(atom.atomType).toBe("effect");
       expect(atom.value).toBe("print");
     });
 
     test("parses debug effect as expression", () => {
       const ast = parseSource("debug: $$");
-      expect(ast.expressions[0]?.type).toBe("Atom");
-      const atom = ast.expressions[0] as AST.Atom;
+      // Effects with arguments are now implicit calls (Lists)
+      expect(ast.expressions[0]?.type).toBe("List");
+      const list = ast.expressions[0] as AST.List;
+      const atom = list.elements[0] as AST.Atom;
       expect(atom.atomType).toBe("effect");
       expect(atom.value).toBe("debug");
     });
 
     test("parses assert effect as expression", () => {
       const ast = parseSource("assert: (> x 0)");
-      expect(ast.expressions[0]?.type).toBe("Atom");
-      const atom = ast.expressions[0] as AST.Atom;
+      // Effects with arguments are now implicit calls (Lists)
+      expect(ast.expressions[0]?.type).toBe("List");
+      const list = ast.expressions[0] as AST.List;
+      const atom = list.elements[0] as AST.Atom;
       expect(atom.atomType).toBe("effect");
       expect(atom.value).toBe("assert");
     });
 
     test("parses custom effect as expression", () => {
       const ast = parseSource('custom_effect: arg1 "arg2" 123');
-      expect(ast.expressions[0]?.type).toBe("Atom");
-      const atom = ast.expressions[0] as AST.Atom;
+      // Effects with arguments are now implicit calls (Lists)
+      expect(ast.expressions[0]?.type).toBe("List");
+      const list = ast.expressions[0] as AST.List;
+      const atom = list.elements[0] as AST.Atom;
       expect(atom.atomType).toBe("effect");
       expect(atom.value).toBe("custom_effect");
     });
   });
 
-  describe("Normalization", () => {
-    test("normalizes simple pipeline to nested calls", () => {
-      const ast = parseAndNormalize("a | b");
-      // a | b -> (b a $$)
-      expect(ast.expressions[0]?.type).toBe("List");
-      const list = ast.expressions[0] as AST.List;
-      expect((list.elements[0] as AST.Atom).value).toBe("b");
-      expect(list.elements).toHaveLength(3);
-      expect((list.elements[1] as AST.Atom).value).toBe("a");
-      expect(AST.isProgramInput(list.elements[2] as AST.Atom)).toBe(true);
+  describe("Pipelines", () => {
+    test("parses simple pipeline", () => {
+      const ast = parseWithShellMode("a | b");
+      // a | b -> Pipeline([$$, List([a]), List([b])])
+      expect(ast.expressions[0]?.type).toBe("Pipeline");
+      const pipeline = ast.expressions[0] as AST.Pipeline;
+      expect(pipeline.stages).toHaveLength(3); // $$, a, b
+      expect(AST.isProgramInput(pipeline.stages[0] as AST.Atom)).toBe(true);
     });
 
-    test("normalizes multi-stage pipeline", () => {
-      const ast = parseAndNormalize("a | b | c");
-      // a | b | c -> (c b a $$)
-      const list = ast.expressions[0] as AST.List;
-      expect((list.elements[0] as AST.Atom).value).toBe("c");
-      expect(list.elements).toHaveLength(4);
-      expect((list.elements[1] as AST.Atom).value).toBe("b");
-      expect((list.elements[2] as AST.Atom).value).toBe("a");
-      expect(AST.isProgramInput(list.elements[3] as AST.Atom)).toBe(true);
+    test("parses multi-stage pipeline", () => {
+      const ast = parseWithShellMode("a | b | c");
+      // a | b | c -> Pipeline([$$, a, b, c])
+      expect(ast.expressions[0]?.type).toBe("Pipeline");
+      const pipeline = ast.expressions[0] as AST.Pipeline;
+      expect(pipeline.stages).toHaveLength(4); // $$, a, b, c
+      expect(AST.isProgramInput(pipeline.stages[0] as AST.Atom)).toBe(true);
     });
 
-    test("normalizes pipeline with call stage", () => {
-      const ast = parseAndNormalize('a | split " "');
-      // a | split " " -> (split a $$ " ")
-      const list = ast.expressions[0] as AST.List;
-      expect((list.elements[0] as AST.Atom).value).toBe("split");
-      expect(list.elements).toHaveLength(4);
-      expect((list.elements[1] as AST.Atom).value).toBe("a");
-      expect(AST.isProgramInput(list.elements[2] as AST.Atom)).toBe(true);
-      expect((list.elements[3] as AST.Atom).value).toBe(" ");
+    test("parses pipeline with explicit call", () => {
+      const ast = parseWithShellMode('a | split " "');
+      // a | split " " -> Pipeline([$$, List([a]), List([split, " "])])
+      expect(ast.expressions[0]?.type).toBe("Pipeline");
+      const pipeline = ast.expressions[0] as AST.Pipeline;
+      expect(pipeline.stages).toHaveLength(3); // $$, a, split " "
+      expect(AST.isProgramInput(pipeline.stages[0] as AST.Atom)).toBe(true);
+      // Last stage should be a List with split and arg
+      expect(pipeline.stages[2]?.type).toBe("List");
+      const splitCall = pipeline.stages[2] as AST.List;
+      expect((splitCall.elements[0] as AST.Atom).value).toBe("split");
     });
 
-    test("auto-injects $$ for bare identifier", () => {
-      const ast = parseAndNormalize("lower");
-      // lower -> (lower $$)
-      expect(ast.expressions[0]?.type).toBe("List");
-      const list = ast.expressions[0] as AST.List;
-      expect((list.elements[0] as AST.Atom).value).toBe("lower");
-      expect(list.elements).toHaveLength(2);
-      expect(AST.isProgramInput(list.elements[1] as AST.Atom)).toBe(true);
+    test("auto-injects $$ for bare identifier in shell mode", () => {
+      const ast = parseWithShellMode("lower");
+      // lower -> Pipeline([$$, List([lower])])
+      expect(ast.expressions[0]?.type).toBe("Pipeline");
+      const pipeline = ast.expressions[0] as AST.Pipeline;
+      expect(pipeline.stages).toHaveLength(2); // $$, lower
+      expect(AST.isProgramInput(pipeline.stages[0] as AST.Atom)).toBe(true);
+      const lowerCall = pipeline.stages[1] as AST.List;
+      expect((lowerCall.elements[0] as AST.Atom).value).toBe("lower");
     });
 
     test("auto-injects $$ for call without source ref", () => {
-      const ast = parseAndNormalize('split " "');
-      // split " " -> (split $$ " ")
-      const list = ast.expressions[0] as AST.List;
-      expect(list.elements).toHaveLength(3);
-      expect((list.elements[0] as AST.Atom).value).toBe("split");
-      expect(AST.isProgramInput(list.elements[1] as AST.Atom)).toBe(true);
-      expect((list.elements[2] as AST.Atom).value).toBe(" ");
+      const ast = parseWithShellMode('split " "');
+      // split " " -> Pipeline([$$, List([split, " "])])
+      expect(ast.expressions[0]?.type).toBe("Pipeline");
+      const pipeline = ast.expressions[0] as AST.Pipeline;
+      expect(pipeline.stages).toHaveLength(2); // $$, split " "
+      expect(AST.isProgramInput(pipeline.stages[0] as AST.Atom)).toBe(true);
     });
 
     test("does not inject $$ when $ present", () => {
-      const ast = parseAndNormalize("(lower $)");
+      const ast = parseWithShellMode("(lower $)");
       const list = ast.expressions[0] as AST.List;
       expect(list.elements).toHaveLength(2);
       expect(AST.isPipelineRef(list.elements[1] as AST.Atom)).toBe(true);
     });
 
     test("does not inject $$ when $$ present", () => {
-      const ast = parseAndNormalize("(lower $$)");
+      const ast = parseWithShellMode("(lower $$)");
       const list = ast.expressions[0] as AST.List;
       expect(list.elements).toHaveLength(2);
       expect(AST.isProgramInput(list.elements[1] as AST.Atom)).toBe(true);
     });
 
     test("does not inject $$ when $0 present", () => {
-      const ast = parseAndNormalize('join $0 " " $1');
+      const ast = parseWithShellMode('join $0 " " $1');
       const list = ast.expressions[0] as AST.List;
       // Should have exactly 4 elements: join, $0, " ", $1
       expect(list.elements).toHaveLength(4);
     });
 
-    test("normalizes pipeline in effect body", () => {
-      const ast = parseAndNormalize("fn: normalize (email) (email | lower | trim)");
-      // With effects as expressions, this parses as a List: (fn normalize (email) (trim lower email))
-      expect(ast.expressions[0]?.type).toBe("List");
-      const list = ast.expressions[0] as AST.List;
-      // First element is fn (without colon in value)
-      expect((list.elements[0] as AST.Atom).value).toBe("fn");
-      // Body should be normalized (trim lower email)
-      const body = list.elements[3] as AST.List;
-      expect((body.elements[0] as AST.Atom).value).toBe("trim");
+    test("parses pipeline inside parentheses", () => {
+      const ast = parseSource("(a | b | c)");
+      // Inside parens: Pipeline([a, b, c])
+      expect(ast.expressions[0]?.type).toBe("Pipeline");
+      const pipeline = ast.expressions[0] as AST.Pipeline;
+      expect(pipeline.stages).toHaveLength(3);
     });
   });
 
   describe("Complex expressions", () => {
     test("parses email normalization pipeline", () => {
-      const ast = parseAndNormalize("email | lower | trim");
-      // email | lower | trim normalizes to (trim lower email $$)
-      const list = ast.expressions[0] as AST.List;
-      expect(list.type).toBe("List");
-      expect((list.elements[0] as AST.Atom).value).toBe("trim");
+      const ast = parseWithShellMode("email | lower | trim");
+      // email | lower | trim -> Pipeline([$$, email, lower, trim])
+      expect(ast.expressions[0]?.type).toBe("Pipeline");
+      const pipeline = ast.expressions[0] as AST.Pipeline;
+      expect(pipeline.stages).toHaveLength(4); // $$, email, lower, trim
     });
 
     test("parses conditional with comparison", () => {
-      const ast = parseAndNormalize('if (> $$ 100) "long" "short"');
+      const ast = parseWithShellMode('if (> $$ 100) "long" "short"');
       const list = ast.expressions[0] as AST.List;
       expect((list.elements[0] as AST.Atom).value).toBe("if");
       const cond = list.elements[1] as AST.List;
@@ -410,7 +414,7 @@ describe("Parser", () => {
     });
 
     test("parses array element access", () => {
-      const ast = parseAndNormalize('join $0 " " $1');
+      const ast = parseWithShellMode('join $0 " " $1');
       const list = ast.expressions[0] as AST.List;
       expect(list.elements).toHaveLength(4);
       expect(AST.getArrayIndex(list.elements[1] as AST.Atom)).toBe(0);
@@ -419,7 +423,7 @@ describe("Parser", () => {
 
     test("parses complex real-world example", () => {
       const source = "let: EMAIL_REGEX /abc/ fn: normalize (email) (email | lower | trim) fn: is_valid (email) (!= (match email EMAIL_REGEX) null) (normalize $$)";
-      const ast = parseAndNormalize(source);
+      const ast = parseWithShellMode(source);
       // With effects as expressions, the entire source is one expression
       expect(ast.expressions[0]?.type).toBe("List");
     });
@@ -447,7 +451,9 @@ describe("Parser", () => {
   describe("AST Type Guards", () => {
     test("isEffect identifies effect atoms", () => {
       const ast = parseSource("let: x 10");
-      const atom = ast.expressions[0] as AST.Atom;
+      // Effects with args are now Lists, so get the first element
+      const list = ast.expressions[0] as AST.List;
+      const atom = list.elements[0] as AST.Atom;
       expect(AST.isEffect(atom)).toBe(true);
       expect(AST.isIdentifier(atom)).toBe(false);
       expect(AST.isLiteral(atom)).toBe(false);
@@ -469,7 +475,9 @@ describe("Parser", () => {
 
     test("isLiteral excludes effects", () => {
       const effectAst = parseSource("print: x");
-      const effectAtom = effectAst.expressions[0] as AST.Atom;
+      // Effects with args are now Lists, so get the first element
+      const list = effectAst.expressions[0] as AST.List;
+      const effectAtom = list.elements[0] as AST.Atom;
       expect(AST.isLiteral(effectAtom)).toBe(false);
     });
 
@@ -495,10 +503,11 @@ describe("Parser", () => {
 
     test("parses program with just an effect", () => {
       const ast = parseSource("let: x 10");
-      // Effect is just a regular expression now (an atom identifier)
-      expect(ast.expressions[0]?.type).toBe("Atom");
+      // Effects with arguments are implicit calls (Lists)
+      expect(ast.expressions[0]?.type).toBe("List");
+      const list = ast.expressions[0] as AST.List;
       // EFFECT_IDENT value is without the colon
-      expect((ast.expressions[0] as AST.Atom).value).toBe("let");
+      expect((list.elements[0] as AST.Atom).value).toBe("let");
     });
 
     test("parses empty list", () => {
@@ -509,7 +518,7 @@ describe("Parser", () => {
     });
 
     test("parses multiple top-level expressions with semicolons", () => {
-      const ast = parseAndNormalize("let: x 10; let: y 20; (+ x y)");
+      const ast = parseWithShellMode("let: x 10; let: y 20; (+ x y)");
       expect(ast.expressions).toHaveLength(3);
 
       // First expression: (let: x 10)
@@ -522,9 +531,12 @@ describe("Parser", () => {
       const second = ast.expressions[1] as AST.List;
       expect((second.elements[0] as AST.Atom).value).toBe("let");
 
-      // Third expression: (+ x y)
-      expect(ast.expressions[2]?.type).toBe("List");
-      const third = ast.expressions[2] as AST.List;
+      // Third expression: In shell mode, (+ x y) becomes Pipeline([$$, (+ x y)])
+      // since it doesn't contain source refs
+      expect(ast.expressions[2]?.type).toBe("Pipeline");
+      const pipeline = ast.expressions[2] as AST.Pipeline;
+      expect(pipeline.stages).toHaveLength(2);
+      const third = pipeline.stages[1] as AST.List;
       expect((third.elements[0] as AST.Atom).value).toBe("+");
     });
   });
