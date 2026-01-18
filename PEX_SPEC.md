@@ -17,6 +17,7 @@ Pex is a minimal expression language designed for defining bidirectional data tr
 - Semicolons (`;`) terminate expressions
 - Parentheses only when needed for grouping
 - First-class functions and constants
+- Two modes: explicit by default (normal mode), convenient for shells (shell mode)
 
 ---
 
@@ -48,7 +49,7 @@ email | lower | trim
 
 ### Effects (Special Forms)
 
-Effects use a `:` postfix to indicate they **do not receive `$$` auto-injection**. They're used for side effects (bindings, logging, assertions, etc.) and can appear anywhere in an expression.
+Effects use a `:` postfix to identify special forms used for side effects (bindings, logging, assertions, etc.). They can appear anywhere in an expression.
 
 ```lisp
 ;; Variable binding (no output)
@@ -67,16 +68,15 @@ if CONDITION TRUE_EXPR FALSE_EXPR
 lower | trim
 ```
 
-**The `:` postfix means**: "Don't auto-inject `$$` into this expression."
+**The `:` postfix**: Marks identifiers as effects.
 
 ---
 
 ## Program Structure
 
-A Pex program consists of **one or more top-level expressions**. Expressions may be **effects** (identifiers with `:` postfix) which don't receive automatic `$$` injection.
+A Pex program consists of **one or more top-level expressions**. Expressions may be **effects** (identifiers with `:` postfix) used for side effects.
 
 **Effects** (`:` postfix) are regular expressions that:
-- Don't get automatic `$$` injection
 - Are used for side effects (bindings, logging, assertions)
 - Can appear at the top level or nested anywhere in the expression tree
 - Can be used conditionally
@@ -87,20 +87,6 @@ A Pex program consists of **one or more top-level expressions**. Expressions may
 - `print:` - Console output (for debugging)
 - `debug:` - Debug logging
 - `assert:` - Runtime assertions
-
-### Key Distinction
-
-**Effects vs Regular Expressions:**
-
-```lisp
-;; Regular expression - gets $$ auto-injected
-lower       ;; → (lower $$)
-
-;; Effect - no $$ auto-injection
-let: x 10   ;; → (let: x 10)  -- no $$ added
-```
-
-The `:` postfix is the **only** difference - effects don't get `$$` auto-injection.
 
 ### Basic Example
 
@@ -146,10 +132,6 @@ Pex distinguishes between the program input and pipeline values:
 - **`$0`, `$1`, `$2`, ...** - Array elements when `$$` is an array
 
 ```lisp
-;; Without $ or $$ - source auto-injected as $$
-lower           ;; → (lower $$)
-lower | trim    ;; → (trim (lower $$))
-
 ;; With $ - refers to piped value
 split " " | (if (> (len $) 0) $ [])
 ;;                      ^      ^
@@ -168,19 +150,11 @@ split $$ " " | (if (> (len $) 2) $ [$$])
 join $0 " " $1   ;; $0 and $1 are elements of $$
 ```
 
-**Auto-injection Rule:** If neither `$` nor `$$` appears in the expression, `$$` is automatically injected as the first argument. However, auto-injection only happens with implicitly-added parentheses, not with explicit parentheses written in the source code. This allows precise control over when the program input is used.
-
-**Explicit vs Implicit Parentheses:**
-- `foo bar` → `(foo $$ bar)` — implicit parens added by normalizer, so `$$` is injected
-- `(foo bar)` → `(foo bar)` — explicit parens from source, no `$$` injection
-- Effect statements (`let:`, `fn:`, etc.) never get `$$` injected
-
 ### Understanding `$` vs `$$`
 
 **`$$` - Program Input (Constant)**
 - The value passed into the entire expression
 - Never changes during execution
-- Used for auto-injection when no variables present
 
 **`$` - Pipeline Variable (Dynamic)**
 - The current value flowing through a pipeline
@@ -190,48 +164,109 @@ join $0 " " $1   ;; $0 and $1 are elements of $$
 **Examples:**
 
 ```lisp
-;; 1. Auto-injection (neither $ nor $$ present)
-lower
-→ (lower $$)
-;; $$ is auto-injected
-
-;; 2. Simple pipeline (no variable references)
-lower | trim
-→ (trim (lower $$))
-;; $$ auto-injected at start
-
-;; 3. Pipeline with $ reference
+;; Pipeline with $ reference
 split " " | (if (> (len $) 0) $ [])
 → $ refers to the result of split
-;; No auto-injection because $ is present
 
-;; 4. Reference original input mid-pipeline
+;; Reference original input mid-pipeline
 split " " | (if (> (len $$) 100) "long-original" $)
 → $$ is the original input
 → $ is the split result
-;; No auto-injection because both $ and $$ are present
 
-;; 5. Multi-source with array elements
+;; Multi-source with array elements
 ;; input: ["Alice", "Smith"]
 join $0 " " $1
 → $0 and $1 are $$[0] and $$[1]
-;; No auto-injection because $N variables are present
 ```
+
+---
+
+## Shell Mode and Auto-Injection
+
+Pex supports two modes of operation:
+
+### Normal Mode (Default)
+When parsing without `shellMode` option, **no automatic `$$` injection occurs**. You must explicitly reference source variables:
+
+```lisp
+;; Normal mode - explicit variables required
+lower $$           ;; → (lower $$)
+split $$ " "       ;; → (split $$ " ")
+$$ | lower | trim  ;; → (trim (lower $$))
+```
+
+### Shell Mode
+When parsing with `shellMode: true`, the **last expression** receives automatic `$$` injection. This mode is designed for interactive shell environments where the final result should operate on stdin/program input.
+
+**Auto-injection Rules in Shell Mode:**
+- Only the **last expression** gets `$$` auto-injected
+- Injection only occurs if no source variables (`$`, `$$`, `$N`) are present
+- Effects can receive injection (the `:` postfix doesn't prevent injection in shell mode)
+- Explicit parentheses can receive injection (parentheses don't prevent injection in shell mode)
+
+**Examples:**
+
+```lisp
+// Shell mode enabled
+a; b; c
+→ (a) (b) (c $$)
+// Only last expression gets $$
+
+lower
+→ (lower $$)
+// Single expression gets $$
+
+lower | trim
+→ (trim (lower $$))
+// $$ injected at pipeline start
+
+let: x 10
+→ (let: x 10 $$)
+// Effects can receive $$ in shell mode
+
+(foo bar)
+→ (foo $$ bar)
+// Explicit parens can receive $$ in shell mode
+
+;; No injection when variables present
+lower $$
+→ (lower $$)
+// Already has $$, no injection
+
+split " " | (len $)
+→ (len (split " "))
+// Has $ reference, no injection
+```
+
+**Injection Position:**
+When `$$` is injected, it's placed after the callee (first element):
+```lisp
+split " "     →  (split $$ " ")
+a | b         →  (b a $$)
+a | b | c     →  (c b a $$)
+```
+
+**Why Two Modes?**
+- **Normal mode** gives precise control for library code and complex transformations
+- **Shell mode** provides convenience for interactive use where the final expression typically operates on input
 
 ---
 
 ## Normalization (Token-Level Desugaring)
 
-Pex syntax is normalized to pure S-expressions **before parsing**. The normalizer operates on the token stream:
+Pex syntax is normalized to pure S-expressions **before parsing**. The normalizer operates on the token stream and accepts a `shellMode` option that controls `$$` auto-injection.
 
 ```lisp
 ;; Source
 let: x 10
 x | double | add_ten
 
-;; Normalized tokens (what the parser sees)
+;; Normalized tokens (what the parser sees, in normal mode)
 (let: x 10)
 (add_ten (double x))
+
+;; In shell mode, last expression gets $$ if no source vars present
+;; Would need explicit x to avoid: x $$ | double | add_ten
 ```
 
 **Pipeline normalization:**
@@ -240,36 +275,55 @@ a | b       →  (b a)
 a | b | c   →  (c (b a))
 ```
 
-**Auto-injection of program input:**
+**Auto-injection in shell mode (last expression only):**
 ```
-lower       →  (lower $$)
-lower | trim →  (trim (lower $$))
+;; shellMode: true
+lower       →  (lower $$)           # Last expression gets $$
+a; b; c     →  (a) (b) (c $$)       # Only last expression
+lower | trim →  (trim (lower $$))   # Pipeline start gets $$
+
+;; shellMode: false (default)
+lower       →  (lower)              # No injection
+a; b; c     →  (a) (b) (c)          # No injection
+lower | trim →  (trim (lower))      # No injection
 ```
 
-**No auto-injection when $ or $$ present:**
+**No auto-injection when source variables present:**
 ```
+;; True regardless of mode
 if $$ "yes" "no"          →  (if $$ "yes" "no")
 split " " | (len $)       →  (len (split " "))
-```
-
-**Explicit parentheses prevent auto-injection:**
-```
-(foo bar)     →  (foo bar)      # No $$ injected - explicit parens
-foo bar       →  (foo $$ bar)   # $$ injected - implicit parens
+join $0 " " $1            →  (join $0 " " $1)
 ```
 
 **Parentheses simplification:**
 ```
 ((expr))      →  (expr)         # Remove redundant nesting
 (foo (bar))   →  (foo bar)      # Remove parens around single identifier when nested
-(bar)         →  (bar)          # Keep top-level parens (prevents spurious $$ injection)
+(bar)         →  (bar)          # Keep top-level parens
 ```
 
-**Effects normalize to S-expressions (wrapped but no $$ injection):**
+**In shell mode, explicit parentheses can receive injection:**
 ```
-let: x 10   →  (let: x 10)         # Wrapped in parens, but no $$ injected
-fn: f (x) body  →  (fn: f (x) body)  # Effects never get $$ auto-injection
-print: "hello"  →  (print: "hello")
+;; shellMode: true
+(foo bar)     →  (foo $$ bar)   # Explicit parens can receive $$
+foo bar       →  (foo $$ bar)   # Implicit parens also receive $$
+
+;; shellMode: false
+(foo bar)     →  (foo bar)      # No injection
+foo bar       →  (foo bar)      # No injection
+```
+
+**Effects normalize to S-expressions:**
+```
+;; shellMode: false
+let: x 10          →  (let: x 10)
+fn: f (x) body     →  (fn: f (x) body)
+print: "hello"     →  (print: "hello")
+
+;; shellMode: true (effects CAN receive $$ if last expression)
+let: x 10          →  (let: x 10 $$)
+print: "hello"     →  (print: "hello" $$)
 ```
 
 **Operator tokenization:**
@@ -530,7 +584,7 @@ atom       := NUMBER
 EFFECT_IDENT := IDENTIFIER ':'
 ```
 
-**Note:** Effects (EFFECT_IDENT) are identifiers followed by `:`. They're regular expressions that don't receive automatic `$$` injection.
+**Note:** Effects (EFFECT_IDENT) are identifiers followed by `:`. In shell mode, they can receive `$$` injection when they are the last expression.
 
 ---
 
@@ -542,6 +596,8 @@ Source Code (.pex)
 Tokenize (recognize |, :, etc.)
     ↓
 Normalize (convert to canonical S-expressions BEFORE parsing)
+  - Accept shellMode option to control $$ injection
+  - In shell mode: inject $$ into last expression only
     ↓
 Parse (build AST from normalized tokens)
     ↓
@@ -552,10 +608,12 @@ Bytecode (.pexb)
 
 **Key invariants:**
 - Normalization happens BEFORE parsing, not after
-- The normalizer converts pipes to nested parentheses and injects `$$` where needed
+- The normalizer converts pipes to nested parentheses
+- In **shell mode**: Injects `$$` into the last expression when no source variables present
+- In **normal mode**: No automatic `$$` injection occurs
 - After normalization, only canonical S-expression tokens exist
 - The parser only sees normalized token streams (no pipes, no semicolons)
-- Effects (`:` postfix) are regular expressions that don't get `$$` injection
+- Effects (`:` postfix) are parsed as regular identifiers (EFFECT_IDENT tokens)
 - The compiler, VM, and all tools only understand pure S-expressions
 
 ---
@@ -565,17 +623,19 @@ Bytecode (.pexb)
 ### Simple Transformations
 
 ```lisp
-;; Email normalization (auto-injected $$)
-lower | trim
+;; Shell mode examples (auto-injected $$)
+lower | trim                          ;; → (trim (lower $$))
+replace /\D/g ""                      ;; → (replace $$ /\D/g "")
 
-;; Phone cleaning (auto-injected $$)
-replace /\D/g ""
+;; Normal mode examples (explicit source variables)
+$$ | lower | trim                     ;; → (trim (lower $$))
+replace $$ /\D/g ""                   ;; → (replace $$ /\D/g "")
 
-;; Conditional using program input
+;; Conditional using program input (works in both modes)
 if (> $$ 10) "big" "small"
 
-;; Conditional using piped value
-lower | if (> (len $) 5) $ "short"
+;; Conditional using piped value (works in both modes)
+$$ | lower | if (> (len $) 5) $ "short"
 ```
 
 ### With Definitions
@@ -590,8 +650,11 @@ fn: c_to_f (c)
 fn: f_to_c (f)
   / (- f FREEZING) RATIO
 
-;; Use it
-100 | c_to_f    ;; → 212
+;; Use it (shell mode with explicit input)
+$$ | c_to_f    ;; → 212 (when input is 100)
+
+;; Or in shell mode
+c_to_f         ;; → (c_to_f $$) if last expression
 ```
 
 ### Complex Module
@@ -643,30 +706,41 @@ fn: safe_email (email)
   normalize email | remove_plus | mask
 
 ;; Usage in transform
-;; Input gets auto-injected as $$:
-safe_email
+;; Shell mode - auto-injected $$:
+safe_email                              ;; → (safe_email $$)
 
-;; Or explicit:
+;; Normal mode - explicit:
 safe_email $$
 
-;; Or with pipeline and conditional:
+;; Shell mode with pipeline and conditional:
 normalize | if (> (len $$) 50) (substring $ 0 50) $
 ;; Here $$ is original input length, $ is normalized result
+
+;; Normal mode requires explicit $$:
+$$ | normalize | if (> (len $$) 50) (substring $ 0 50) $
 ```
 
 ---
 
 ## Lens Configuration
 
-Pex expressions are used in lens transformation configs:
+Pex expressions are used in lens transformation configs. Lenses typically use **shell mode** for convenience, allowing the last expression to auto-receive program input.
 
 ```yaml
 lenses:
-  # Simple transformation (auto-injected $$)
+  # Simple transformation (shell mode - auto-injected $$)
   - transform:
       source: email
       target: email_clean
       expr: lower | trim
+      # Normalized: (trim (lower $$))
+
+  # Normal mode - explicit variables required
+  - transform:
+      source: email
+      target: email_clean
+      expr: $$ | lower | trim
+      # Same result, explicit control
 
   # With effects (bindings and functions)
   - transform:
@@ -676,30 +750,34 @@ lenses:
         let: FREEZING 32
         fn: c_to_f (c) + (* c 1.8) FREEZING
         c_to_f $$
+      # Explicit $$ ensures correct input
 
   # Multi-source (using $0, $1 which reference $$)
   - transform:
       source: [first_name, last_name]
       target: full_name
       expr: join $0 " " $1 | trim
+      # Source vars present, no auto-injection
 
   # Using modules
   - transform:
       source: raw_email
       target: domain
       expr: email.extract_domain $$
-  
+      # Explicit $$ is clearer
+
   # Pipeline with original input reference
   - transform:
       source: text
       target: summary
       expr: |
-        split " " | 
+        $$ | split " " |
           if (> (len $$) 100)
             (get $ 0 10)
             $
-  
-  # With debugging
+      # Explicit $$ at start for clarity
+
+  # With debugging (shell mode)
   - transform:
       source: data
       target: result
@@ -709,6 +787,7 @@ lenses:
         let: cleaned (trim $$)
         print: "Cleaned"
         upper cleaned
+      # Last expr gets $$ in shell mode: (upper cleaned $$)
 ```
 
 ---
@@ -785,11 +864,12 @@ lenses:
 2. **S-expressions at core** - Uniform internal representation
 3. **Normalize before parsing** - Convert to canonical form before building the AST
 4. **Pipes for readability** - But they're just syntactic sugar
-5. **Implicit when safe** - Auto-inject source, but allow explicit control via parentheses
+5. **Explicit by default** - Normal mode requires explicit source variables; shell mode provides convenience
 6. **First-class functions** - Functions are values
 7. **Compiled to bytecode** - Fast execution, compact storage
-8. **Effects are expressions** - `:` postfix prevents `$$` auto-injection, effects can appear anywhere
+8. **Effects are expressions** - `:` postfix marks side effects, can appear anywhere
 9. **Operators as identifiers** - Uniform treatment of all callable functions
+10. **Two modes** - Normal mode for precision, shell mode for convenience
 
 ---
 
@@ -840,17 +920,27 @@ Potential additions (not yet implemented):
 - Distinguish regex literals from division using context-aware lexing
 
 **Normalization (BEFORE parsing):**
+- Accept `shellMode` option to control `$$` injection behavior
 - Convert pipes to nested parentheses: `a | b | c` → `(c (b a))`
 - Split at semicolons into independent expression groups
-- Inject `$$` as first argument when no source refs present (respecting explicit parentheses)
+- Track which group is the last expression
+- In **shell mode**: Inject `$$` into the last expression only (when no source refs present)
+- In **normal mode**: No automatic `$$` injection
 - Simplify redundant parentheses around single identifiers when nested
-- Mark implicitly-added parentheses as "synthetic" to control auto-injection
+
+**Shell Mode Injection Details:**
+- Only the last expression group receives `$$` injection
+- Injection position: after the callee (first element)
+- No injection if any source variable (`$`, `$$`, `$N`) is already present
+- Effects can receive injection (`:` postfix doesn't prevent injection in shell mode)
+- Explicit parentheses can receive injection (parentheses don't prevent injection in shell mode)
 
 **Parsing:**
 - Build AST from normalized token stream (no pipes or semicolons)
 - Parser only sees canonical S-expression structure
 - Effects (EFFECT_IDENT) are parsed as regular identifiers (atoms)
 - Operators are parsed as callable identifiers
+- Parser accepts `ParseOptions` with `shellMode` flag (for metadata/debugging)
 
 **Post-parsing:**
 - All subsequent phases work with pure S-expressions via the AST

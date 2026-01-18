@@ -5,66 +5,65 @@ import { TokenType } from "./lexer.ts";
 import { print } from "./printer.ts";
 
 // Helper to get normalized tokens as a readable string
-const normalizeSource = (source: string) => {
+const normalizeSource = (source: string, options?: { shellMode?: boolean }) => {
   const tokens = tokenize(source);
-  const normalized = normalizeTokens(tokens);
+  const normalized = normalizeTokens(tokens, options);
   return print(normalized);
 };
 
 // Helper to check if normalized tokens match expected pattern
-const expectNormalized = (source: string, expected: string) => {
-  const result = normalizeSource(source);
+const expectNormalized = (source: string, expected: string, options?: { shellMode?: boolean }) => {
+  const result = normalizeSource(source, options);
   expect(result).toBe(expected);
 };
 
 describe("Token Normalizer", () => {
   describe("Implicit calls", () => {
-    test("wraps bare identifier in parens and injects $$", () => {
+    test("wraps bare identifier in parens (no $$ injection without options)", () => {
       expectNormalized(
         "lower",
-        "(lower $$)"
+        "(lower)"
       );
     });
 
-    test("wraps identifier with args in parens and injects $$", () => {
+    test("wraps identifier with args in parens (no $$ injection without options)", () => {
       expectNormalized(
         'split " "',
-        '(split $$ " ")'
+        '(split " ")'
       );
     });
 
-    test("wraps multiple args and injects $$", () => {
+    test("wraps multiple args (no $$ injection without options)", () => {
       expectNormalized(
         "add 1 2",
-        "(add $$ 1 2)"
+        "(add 1 2)"
       );
     });
   });
 
   describe("Pipe normalization", () => {
-    test("normalizes simple pipe (a | b)", () => {
+    test("normalizes simple pipe (no $$ injection without options)", () => {
       expectNormalized(
         "a | b",
-        "(b a $$)"
+        "(b a)"
       );
     });
 
-    test("normalizes three-stage pipeline (a | b | c)", () => {
+    test("normalizes three-stage pipeline (no $$ injection without options)", () => {
       expectNormalized(
         "a | b | c",
-        "(c b a $$)"
+        "(c b a)"
       );
     });
 
-    test("normalizes pipe with function call", () => {
+    test("normalizes pipe with function call (no $$ injection without options)", () => {
       expectNormalized(
         'a | split " "',
-        '(split a $$ " ")'
+        '(split a " ")'
       );
     });
 
     test("normalizes pipes inside parens", () => {
-      // Explicit parens disable $$-injection
       expectNormalized(
         "(a | b)",
         "(b a)"
@@ -72,7 +71,6 @@ describe("Token Normalizer", () => {
     });
 
     test("normalizes nested pipes at multiple depths", () => {
-      // (a | b) | c - explicit parens at the start prevent $$ injection entirely
       expectNormalized(
         "(a | b) | c",
         "(c b a)"
@@ -87,89 +85,88 @@ describe("Token Normalizer", () => {
   });
 
   describe("Semicolon normalization", () => {
-    test("splits at semicolon", () => {
+    test("splits at semicolon (no $$ injection without options)", () => {
       expectNormalized(
         "a; b",
-        "(a $$) (b $$)"
+        "(a) (b)"
       );
     });
 
-    test("splits multiple semicolons", () => {
+    test("splits multiple semicolons (no $$ injection without options)", () => {
       expectNormalized(
         "a; b; c",
-        "(a $$) (b $$) (c $$)"
+        "(a) (b) (c)"
       );
     });
 
-    test("handles semicolon with function calls", () => {
+    test("handles semicolon with function calls (no $$ injection without options)", () => {
       expectNormalized(
         'split " "; lower',
-        '(split $$ " ") (lower $$)'
+        '(split " ") (lower)'
       );
     });
   });
 
   describe("$$-injection", () => {
-    test("injects $$ into call without source refs", () => {
+    test("does not inject $$ without options", () => {
       expectNormalized(
         "lower",
-        "(lower $$)"
+        "(lower)"
       );
     });
 
-    test("does not inject $$ if $ is present", () => {
+    test("preserves existing source refs", () => {
       expectNormalized(
         "add $ 1",
         "(add $ 1)"
       );
     });
 
-    test("does not inject $$ if $$ is present", () => {
+    test("preserves existing $$", () => {
       expectNormalized(
         "add $$ 1",
         "(add $$ 1)"
       );
     });
 
-    test("does not inject $$ if $0 is present", () => {
+    test("preserves existing $0", () => {
       expectNormalized(
         "add $0 1",
         "(add $0 1)"
       );
     });
 
-    test("injects $$ into first segment of pipeline only", () => {
+    test("no injection into pipeline without options", () => {
       const tokens = tokenize("a | b");
       const normalized = normalizeTokens(tokens);
 
-      // Count SOURCE_REF tokens - should only be one (in first segment)
+      // Count SOURCE_REF tokens - should be zero without options
       const sourceRefCount = normalized.filter(t => t.type === TokenType.SOURCE_REF).length;
-      expect(sourceRefCount).toBe(1);
+      expect(sourceRefCount).toBe(0);
     });
 
-    test("does not inject $$ into explicit parens", () => {
-      // Explicit parens prevent $$-injection
+    test("no injection into explicit parens without options", () => {
       // Parens around single identifiers with no args are simplified
       expectNormalized(
         "(foo (bar))",
         "(foo bar)"
       );
 
-      // Verify no SOURCE_REF tokens exist (all parens are explicit)
+      // Verify no SOURCE_REF tokens exist
       const tokens = tokenize("(foo (bar))");
       const normalized = normalizeTokens(tokens);
       const sourceRefCount = normalized.filter(t => t.type === TokenType.SOURCE_REF).length;
       expect(sourceRefCount).toBe(0);
     });
 
-    test("distinguishes implicit vs explicit parens", () => {
-      // Implicit parens (no parens in source) get $$-injection
+    test("no injection without options regardless of paren type", () => {
+      // Implicit parens (no parens in source) - still no injection without options
       expectNormalized(
         "foo bar",
-        "(foo $$ bar)"
+        "(foo bar)"
       );
 
-      // Explicit parens (parens in source) prevent $$-injection
+      // Explicit parens (parens in source) - no injection without options
       expectNormalized(
         "(foo bar)",
         "(foo bar)"
@@ -293,10 +290,10 @@ describe("Token Normalizer", () => {
       expect(hasSourceRef).toBe(false);
     });
 
-    test("handles operator identifiers", () => {
+    test("handles operator identifiers (no $$ injection without options)", () => {
       expectNormalized(
         "+ 1 2",
-        "(+ $$ 1 2)"
+        "(+ 1 2)"
       );
     });
 
@@ -354,14 +351,85 @@ describe("Token Normalizer", () => {
       }
     });
 
-    test("injected $$ tokens have position info", () => {
+    test("injected $$ tokens have position info (with shellMode)", () => {
       const tokens = tokenize("lower");
-      const normalized = normalizeTokens(tokens);
+      const normalized = normalizeTokens(tokens, { shellMode: true });
 
       const sourceRefToken = normalized.find(t => t.type === TokenType.SOURCE_REF);
       expect(sourceRefToken).toBeDefined();
       expect(sourceRefToken?.line).toBeGreaterThanOrEqual(1);
       expect(sourceRefToken?.column).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("Shell mode injection", () => {
+    test("injects $$ only into last expression when shellMode is true", () => {
+      const tokens = tokenize("a; b; c");
+      const normalized = normalizeTokens(tokens, { shellMode: true });
+      const printed = print(normalized);
+
+      // Only last expression should have $$
+      expect(printed).toBe("(a) (b) (c $$)");
+    });
+
+    test("effects can receive $$ injection in shell mode", () => {
+      const tokens = tokenize("let: x 10");
+      const normalized = normalizeTokens(tokens, { shellMode: true });
+
+      // Should have SOURCE_REF token
+      const hasSourceRef = normalized.some(t => t.type === TokenType.SOURCE_REF);
+      expect(hasSourceRef).toBe(true);
+    });
+
+    test("explicit parens can receive $$ injection in shell mode", () => {
+      const tokens = tokenize("(foo bar)");
+      const normalized = normalizeTokens(tokens, { shellMode: true });
+
+      // Should have SOURCE_REF token (explicit parens don't block in shell mode)
+      const hasSourceRef = normalized.some(t => t.type === TokenType.SOURCE_REF);
+      expect(hasSourceRef).toBe(true);
+    });
+
+    test("no injection when shellMode is false", () => {
+      const tokens = tokenize("a; b");
+      const normalized = normalizeTokens(tokens, { shellMode: false });
+      const printed = print(normalized);
+
+      // No $$ in any expression
+      expect(printed).toBe("(a) (b)");
+    });
+
+    test("shell mode with pipelines injects only in last group", () => {
+      const tokens = tokenize("a | b; c | d");
+      const normalized = normalizeTokens(tokens, { shellMode: true });
+      const printed = print(normalized);
+
+      // Only second pipeline should get $$
+      expect(printed).toBe("(b a) (d c $$)");
+    });
+
+    test("single expression with shellMode gets $$ injection", () => {
+      expectNormalized(
+        "lower",
+        "(lower $$)",
+        { shellMode: true }
+      );
+    });
+
+    test("shell mode injects $$ after callee in calls", () => {
+      expectNormalized(
+        'split " "',
+        '(split $$ " ")',
+        { shellMode: true }
+      );
+    });
+
+    test("shell mode preserves existing source refs", () => {
+      expectNormalized(
+        "add $$ 1",
+        "(add $$ 1)",
+        { shellMode: true }
+      );
     });
   });
 });
