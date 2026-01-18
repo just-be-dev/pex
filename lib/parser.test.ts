@@ -9,9 +9,10 @@ const parseSource = (source: string) => parse(tokenize(source));
 
 // Helper to get normalized and parsed expression
 // Order: tokenize -> normalize tokens -> parse
+// Uses shellMode by default for backward compatibility with existing tests
 const parseAndNormalize = (source: string) => {
   const tokens = tokenize(source);
-  const normalizedTokens = normalizeTokens(tokens);
+  const normalizedTokens = normalizeTokens(tokens, { shellMode: true });
   const ast = parse(normalizedTokens);
   return ast;
 };

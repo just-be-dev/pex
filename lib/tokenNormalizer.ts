@@ -6,26 +6,29 @@ import { TokenType } from "./lexer.ts";
  * 1. Splitting at semicolons into expression groups
  * 2. Converting pipes to nested parens
  * 3. Making implicit calls explicit with parens
- * 4. Injecting $$ into calls without source refs
+ * 4. Injecting $$ into calls without source refs (if shellMode enabled)
  */
-export function normalizeTokens(tokens: Token[]): Token[] {
+export function normalizeTokens(tokens: Token[], options?: { shellMode?: boolean }): Token[] {
   // Remove EOF token, we'll add it back at the end
   const tokensWithoutEof = tokens.filter(t => t.type !== TokenType.EOF);
   const eofToken = tokens[tokens.length - 1]!;
 
   // Split at semicolons
   const groups = splitAtSemicolons(tokensWithoutEof);
+  const lastGroupIndex = groups.length - 1;
 
   // Process each group
-  const normalizedGroups = groups.map(group => {
+  const normalizedGroups = groups.map((group, index) => {
+    const isLastGroup = index === lastGroupIndex;
+
     // Handle pipes first (splits into segments, wraps each, injects $$, then folds)
-    const withPipes = normalizePipes(group);
+    const withPipes = normalizePipes(group, false, options, isLastGroup);
 
     // Make calls explicit (wrap in parens) and inject $$ if not already done
     // Note: For groups WITH pipes, these are no-ops (already wrapped & injected)
     // For groups WITHOUT pipes, these calls are necessary
     const wrapped = makeCallsExplicit(withPipes);
-    const injected = injectProgramInput(wrapped);
+    const injected = injectProgramInput(wrapped, options, isLastGroup);
 
     return injected;
   });
@@ -135,9 +138,16 @@ function splitAtSemicolons(tokens: Token[]): Token[][] {
 /**
  * Convert pipe operators to nested paren structure at all depths
  * Example: [a, PIPE, b, PIPE, c] → [LPAREN, c, LPAREN, b, a, RPAREN, RPAREN]
- * @param insideExplicitParens - if true, don't inject $$ (explicit parens disable injection)
+ * @param insideExplicitParens - tracks whether we're inside explicit parentheses
+ * @param options - parser options including shellMode
+ * @param isLastGroup - whether this is the last expression group
  */
-function normalizePipes(tokens: Token[], insideExplicitParens: boolean = false): Token[] {
+function normalizePipes(
+  tokens: Token[],
+  insideExplicitParens: boolean = false,
+  options?: { shellMode?: boolean },
+  isLastGroup: boolean = false
+): Token[] {
   const result: Token[] = [];
   let i = 0;
 
@@ -148,7 +158,7 @@ function normalizePipes(tokens: Token[], insideExplicitParens: boolean = false):
       // Found a paren group - recursively normalize what's inside
       // Explicit parens (not synthetic) means we're inside explicit context
       const { endIndex, contents } = extractParenGroup(tokens, i);
-      const normalized = normalizePipes(contents, true); // Inside explicit parens now
+      const normalized = normalizePipes(contents, true, options, isLastGroup); // Inside explicit parens now
 
       result.push(token); // LPAREN
       result.push(...normalized);
@@ -162,7 +172,7 @@ function normalizePipes(tokens: Token[], insideExplicitParens: boolean = false):
   }
 
   // Now handle pipes at the current level (outside parens)
-  return normalizePipesAtCurrentLevel(result, insideExplicitParens);
+  return normalizePipesAtCurrentLevel(result, insideExplicitParens, options, isLastGroup);
 }
 
 /**
@@ -199,9 +209,16 @@ function extractParenGroup(tokens: Token[], startIndex: number): { endIndex: num
 
 /**
  * Normalize pipes at the current level (not inside nested parens)
- * @param insideExplicitParens - if true, don't inject $$ (explicit parens disable injection)
+ * @param insideExplicitParens - tracks whether we're inside explicit parentheses
+ * @param options - parser options including shellMode
+ * @param isLastGroup - whether this is the last expression group
  */
-function normalizePipesAtCurrentLevel(tokens: Token[], insideExplicitParens: boolean = false): Token[] {
+function normalizePipesAtCurrentLevel(
+  tokens: Token[],
+  insideExplicitParens: boolean = false,
+  options?: { shellMode?: boolean },
+  isLastGroup: boolean = false
+): Token[] {
   // Find pipe positions (only at depth 0)
   const pipePositions: number[] = [];
   let depth = 0;
@@ -228,27 +245,16 @@ function normalizePipesAtCurrentLevel(tokens: Token[], insideExplicitParens: boo
   }
   segments.push(tokens.slice(start));
 
-  // Check if the first segment starts with explicit (non-synthetic) parens
-  // If so, don't inject $$ anywhere in this pipeline
-  const firstSegmentIsExplicit = segments[0] && segments[0].length > 0 &&
-    segments[0][0]!.type === TokenType.LPAREN &&
-    !(segments[0][0] as any).__synthetic;
-
-  // Process each segment: wrap in parens and inject $$ into first segment only (unless explicit)
+  // Process each segment: wrap in parens and inject $$ into first segment only if appropriate
   const processedSegments = segments.map((segment, index) => {
     // Wrap in parens if not already wrapped
     let wrapped = makeCallsExplicit(segment);
 
-    // If inside explicit parens, mark synthetic tokens to prevent injection
-    if (insideExplicitParens || firstSegmentIsExplicit) {
-      wrapped = markNoInject(wrapped);
-    }
-
     // Inject $$ into the first segment (leftmost, earliest in execution)
-    // But NOT if we're inside explicit parens OR the first segment is explicit
+    // Only inject into first segment if appropriate based on options
     // Other segments don't need injection - they receive the previous result as an argument
-    if (index === 0 && !insideExplicitParens && !firstSegmentIsExplicit) {
-      wrapped = injectProgramInput(wrapped);
+    if (index === 0 && !insideExplicitParens) {
+      wrapped = injectProgramInput(wrapped, options, isLastGroup);
     }
 
     return wrapped;
@@ -344,24 +350,26 @@ function unwrapAllParens(tokens: Token[]): Token[] {
 }
 
 /**
- * Mark tokens to prevent $$-injection (used for explicit paren contexts)
- */
-function markNoInject(tokens: Token[]): Token[] {
-  return tokens.map(t => {
-    if (t.type === TokenType.LPAREN || t.type === TokenType.RPAREN) {
-      const marked: any = { ...t };
-      marked.__noInject = true;
-      return marked as Token;
-    }
-    return t;
-  });
-}
-
-/**
  * Inject $$ into calls that don't have source refs
- * Only injects into calls with synthetic (implicitly added) parens, not explicit parens
+ * Only injects when shellMode is enabled and this is the last group
  */
-function injectProgramInput(tokens: Token[]): Token[] {
+function injectProgramInput(
+  tokens: Token[],
+  options?: { shellMode?: boolean },
+  isLastGroup: boolean = false
+): Token[] {
+  // Determine if we should inject based on options
+  const shellMode = options?.shellMode ?? false;
+
+  // If shellMode is false, don't inject at all
+  // If shellMode is true, only inject if this is the last group
+  const shouldAttemptInject = shellMode && isLastGroup;
+
+  if (!shouldAttemptInject) {
+    // Still need to recursively process nested parens
+    return processNestedParens(tokens);
+  }
+
   // Process recursively from innermost to outermost
   const result: Token[] = [];
   let i = 0;
@@ -370,24 +378,18 @@ function injectProgramInput(tokens: Token[]): Token[] {
     const token = tokens[i]!;
 
     if (token.type === TokenType.LPAREN) {
-      // Check if this LPAREN is synthetic (implicitly added) or explicit (from source)
-      const isSynthetic = (token as any).__synthetic === true;
-      // Check if marked to prevent injection (inside explicit paren context)
-      const noInject = (token as any).__noInject === true;
-
       // Extract paren group
       const { endIndex, contents } = extractParenGroup(tokens, i);
-      const normalized = injectProgramInput(contents);
-
-      // Check if this is an EFFECT_IDENT group (no injection for effects)
-      const isEffect = normalized.length > 0 && normalized[0]!.type === TokenType.EFFECT_IDENT;
+      const normalized = injectProgramInput(contents, options, isLastGroup);
 
       // Check if it contains any source refs
       const hasSourceRef = normalized.some(t => t.type === TokenType.SOURCE_REF);
 
       result.push(token); // LPAREN
-      // Only inject $$ if: not an effect, no source refs, has content, parens are synthetic, and not marked noInject
-      if (!isEffect && !hasSourceRef && normalized.length > 0 && isSynthetic && !noInject) {
+
+      // In shell mode, we ignore effect and synthetic checks
+      // Only check if source ref already exists
+      if (!hasSourceRef && normalized.length > 0) {
         // Inject $$ after the first token (callee)
         result.push(normalized[0]!);
         result.push(createSourceRefToken('program', normalized[0]));
@@ -395,7 +397,36 @@ function injectProgramInput(tokens: Token[]): Token[] {
       } else {
         result.push(...normalized);
       }
+
       result.push(tokens[endIndex]!); // RPAREN
+
+      i = endIndex + 1;
+    } else {
+      result.push(token);
+      i++;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Helper function for processing nested parens without injection
+ */
+function processNestedParens(tokens: Token[]): Token[] {
+  const result: Token[] = [];
+  let i = 0;
+
+  while (i < tokens.length) {
+    const token = tokens[i]!;
+
+    if (token.type === TokenType.LPAREN) {
+      const { endIndex, contents } = extractParenGroup(tokens, i);
+      const processed = processNestedParens(contents);
+
+      result.push(token);
+      result.push(...processed);
+      result.push(tokens[endIndex]!);
 
       i = endIndex + 1;
     } else {
