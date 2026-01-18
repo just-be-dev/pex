@@ -13,7 +13,7 @@
 
 export type AtomValue = string | number | boolean | null | RegExp;
 
-export type AtomType = "number" | "string" | "boolean" | "null" | "regex" | "identifier";
+export type AtomType = "number" | "string" | "boolean" | "null" | "regex" | "identifier" | "effect";
 
 export interface Atom {
   type: "Atom";
@@ -63,7 +63,11 @@ export function isIdentifier(expr: SExpr): expr is Atom {
 }
 
 export function isLiteral(expr: SExpr): expr is Atom {
-  return isAtom(expr) && expr.atomType !== "identifier";
+  return isAtom(expr) && expr.atomType !== "identifier" && expr.atomType !== "effect";
+}
+
+export function isEffect(expr: SExpr): expr is Atom {
+  return isAtom(expr) && expr.atomType === "effect";
 }
 
 // ============================================
