@@ -9,4 +9,4 @@ pre-commit:
 pre-push:
   commands:
     typecheck:
-      run: tsgo --noEmit
+      run: mise run typecheck
