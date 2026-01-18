@@ -22,3 +22,7 @@ run = "bun test"
 [tasks.lint]
 description = "Lint the project with oxlint"
 run = "oxlint ."
+
+[tasks.check]
+description = "Run all checks (test, lint, typecheck)"
+depends = ["test", "lint", "typecheck"]
