@@ -2,6 +2,15 @@
 
 /**
  * PEX CLI - Command-line interface for the PEX interpreter
+ *
+ * TODO: This CLI currently imports from the old interpreter which has been deleted.
+ * It needs to be updated to use the VM compilation pipeline:
+ * 1. parse(source) -> AST
+ * 2. lowerProgram(ast) -> IRModule
+ * 3. generateBytecode(irModule) -> BytecodeFile
+ * 4. runVM(bytecode, input) -> Value
+ *
+ * See lib/ir/integration.test.ts for examples of this pipeline.
  */
 
 import { executeToJS, RuntimeError } from "./lib/interpreter/index.ts";
