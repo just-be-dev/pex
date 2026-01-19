@@ -322,14 +322,6 @@ interface ResolvedVar {
 }
 
 /**
- * Scope for tracking local variables.
- */
-interface Scope {
-  locals: Map<string, number>; // name -> local index
-  depth: number;
-}
-
-/**
  * Context for compiling a function.
  */
 class FunctionContext {
@@ -649,7 +641,7 @@ function compileIf(expr: IRIf, ctx: CompilationContext): void {
   instr.emitJump(jumpOpcode, elseLabel);
 
   // Compile then branch
-  compileExpr(expr.then, ctx);
+  compileExpr(expr.thenBranch, ctx);
 
   // Jump to end
   const jumpEndOpcode = selectJumpOpcode(0); // Will be patched
@@ -804,7 +796,7 @@ function compileCall(expr: IRCall, ctx: CompilationContext): void {
  * Compile a function expression.
  */
 function compileFn(expr: IRFn, ctx: CompilationContext): void {
-  const { params, body, captures } = expr;
+  const { params, body } = expr;
   const instr = ctx.currentFunction.instructions;
 
   // Enter new function scope
@@ -929,7 +921,7 @@ function selectLoadUpvalueOpcode(index: number): Opcode {
 /**
  * Select JUMP opcode variant.
  */
-function selectJumpOpcode(offset: number): Opcode {
+function selectJumpOpcode(_offset: number): Opcode {
   // For now, always use U8 - will be upgraded if needed during backpatching
   return Opcode.JUMP_U8;
 }
@@ -937,7 +929,7 @@ function selectJumpOpcode(offset: number): Opcode {
 /**
  * Select JUMP_IF_FALSE opcode variant.
  */
-function selectJumpIfFalseOpcode(offset: number): Opcode {
+function selectJumpIfFalseOpcode(_offset: number): Opcode {
   return Opcode.JUMP_IF_FALSE_U8;
 }
 

@@ -209,7 +209,7 @@ async function main() {
     const bytecode = generateBytecode(irModule);
 
     // Create effect handler (no-op for now)
-    const effectHandler: EffectHandler = (name, args, continuation) => {
+    const effectHandler: EffectHandler = (name, _args, _continuation) => {
       console.error(`Unhandled effect: ${name}`);
       process.exit(1);
     };

@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "bun:test";
-import { VM, VMError, throwingEffectHandler, type EffectHandler, Continuation } from "./vm.ts";
+import { VM, throwingEffectHandler, type EffectHandler, Continuation } from "./vm.ts";
 import type { BytecodeFile, FunctionTemplate } from "../bytecode/format.ts";
 import { Opcode } from "../bytecode/opcodes.ts";
 import { ConstantType } from "../bytecode/format.ts";
@@ -1113,22 +1113,7 @@ describe("VM - Complex Programs", () => {
 
   it("should handle conditional execution", () => {
     // max: (a, b) => if (a > b) a else b
-    // We'll encode: load a, load b, GT, if false jump to else, load a, return, else: load b, return
-    const code = [
-      // Function: max(a, b) - offsets 0-11
-      Opcode.LOAD_LOCAL_U8, 0, // Load a (offset 0-1)
-      Opcode.LOAD_LOCAL_U8, 1, // Load b (offset 2-3)
-      Opcode.GT, // a > b? (offset 4)
-      Opcode.JUMP_IF_FALSE_U8, 9, // If false, jump to offset 9 (offset 5-6)
-      // Then branch:
-      Opcode.LOAD_LOCAL_U8, 0, // Load a (offset 7-8)
-      Opcode.RETURN, // Return a (offset 9)
-      // Else branch (offset 10-11, but JUMP goes to 9 which is RETURN above)
-      // So we need: jump past the else when then executes
-      // Let me redo this properly with a JUMP after then
-    ];
-
-    // Actually, let me encode it as: if (a > b) { return a } else { return b }
+    // Encode it as: if (a > b) { return a } else { return b }
     const funcCode = [
       Opcode.LOAD_LOCAL_U8, 0, // Load a (offset 0-1)
       Opcode.LOAD_LOCAL_U8, 1, // Load b (offset 2-3)

@@ -7,14 +7,12 @@ import type {
   BytecodeFile,
   Constant,
   FunctionTemplate,
-  FunctionDebugInfo,
 } from "./format.ts";
 import { ConstantType } from "./format.ts";
 import {
   Opcode,
   OPCODE_METADATA,
   OperandType,
-  getOperandTypeFromOpcode,
   isValidOpcode,
 } from "./opcodes.ts";
 
@@ -296,9 +294,9 @@ export function disassembleInstruction(
  */
 function generateComment(
   opcode: number,
-  result: DisassembledInstruction,
-  file: BytecodeFile,
-  absoluteOffset: number
+  _result: DisassembledInstruction,
+  _file: BytecodeFile,
+  _absoluteOffset: number
 ): string | null {
   if (!isValidOpcode(opcode)) {
     return null;

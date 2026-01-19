@@ -562,7 +562,7 @@ function analyzeCaptures(
 
       case "if":
         visit(e.cond, locals);
-        visit(e.then, locals);
+        visit(e.thenBranch, locals);
         visit(e.else, locals);
         break;
 

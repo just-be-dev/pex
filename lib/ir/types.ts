@@ -45,7 +45,7 @@ export interface IRVar {
 export interface IRIf {
   type: "if";
   cond: IRExpr;
-  then: IRExpr;
+  thenBranch: IRExpr;
   else: IRExpr;
 }
 
@@ -136,8 +136,8 @@ export function irVar(name: string): IRVar {
   return { type: "var", name };
 }
 
-export function irIf(cond: IRExpr, then: IRExpr, elseExpr: IRExpr): IRIf {
-  return { type: "if", cond, then, else: elseExpr };
+export function irIf(cond: IRExpr, thenBranch: IRExpr, elseExpr: IRExpr): IRIf {
+  return { type: "if", cond, thenBranch, else: elseExpr };
 }
 
 export function irLet(name: string, value: IRExpr, body: IRExpr): IRLet {

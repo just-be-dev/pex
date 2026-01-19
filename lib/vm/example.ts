@@ -15,11 +15,9 @@ import {
   createVM,
   numberValue,
   stringValue,
-  arrayValue,
   nullValue,
   displayValue,
   type EffectHandler,
-  type Value,
 } from "./index.ts";
 
 // =============================================================================

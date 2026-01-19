@@ -483,7 +483,6 @@ export class Lexer {
     this.position++;
 
     let hasContent = false;
-    let foundClosing = false;
 
     // Look for closing / (handling escapes)
     while (this.position < this.source.length) {
@@ -503,7 +502,6 @@ export class Lexer {
         }
       } else if (char === "/") {
         // Found closing /
-        foundClosing = true;
         break;
       } else if (char === " " && !hasContent) {
         // Leading space after / suggests it's a division operator

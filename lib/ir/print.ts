@@ -13,14 +13,6 @@
 
 import type {
   IRExpr,
-  IRConst,
-  IRVar,
-  IRIf,
-  IRLet,
-  IRSeq,
-  IRCall,
-  IRFn,
-  IREffect,
   IRModule,
   ConstValue,
 } from "./types.ts";
@@ -67,7 +59,7 @@ function printExpr(expr: IRExpr, indent: number = 0): string {
 
     case "if": {
       const cond = printExpr(expr.cond, 0);
-      const thenBranch = printExpr(expr.then, 0);
+      const thenBranch = printExpr(expr.thenBranch, 0);
       const elseBranch = printExpr(expr.else, 0);
       return `${spaces}(if ${cond}\n${spaces}  ${thenBranch}\n${spaces}  ${elseBranch})`;
     }

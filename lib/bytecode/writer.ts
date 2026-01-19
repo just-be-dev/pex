@@ -12,7 +12,6 @@ import {
   type FunctionTemplate,
   type Upvalue,
   MAGIC_NUMBER,
-  HeaderFlags,
   hasDebugInfo,
   type DebugInfo,
   type FunctionDebugInfo,
@@ -544,25 +543,18 @@ export function writeBytecode(file: BytecodeFile): Uint8Array {
   writeConstantPool(sectionsBuilder, file.constantPool.constants);
 
   // Name table
-  const nameTableOffset = constantPoolOffset + sectionsBuilder.getOffset();
   writeNameTable(sectionsBuilder, file.nameTable.names);
 
   // Function templates
-  const functionTemplatesOffset =
-    constantPoolOffset + sectionsBuilder.getOffset();
   writeFunctionTemplates(
     sectionsBuilder,
     file.functionTemplates.templates
   );
 
   // Code section
-  const codeSectionOffset = constantPoolOffset + sectionsBuilder.getOffset();
   writeCodeSection(sectionsBuilder, file.codeSection.code);
 
   // Debug info (if present)
-  const debugInfoOffset = hasDebug
-    ? constantPoolOffset + sectionsBuilder.getOffset()
-    : 0;
   if (hasDebug && file.debugInfo) {
     writeDebugInfo(sectionsBuilder, file.debugInfo);
   }

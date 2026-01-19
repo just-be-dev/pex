@@ -19,7 +19,7 @@ import { describe, test as it, expect } from "bun:test";
 import { parse } from "./parser/index.ts";
 import { lowerProgram } from "./ir/lower.ts";
 import { generateBytecode } from "./codegen/bytecode.ts";
-import { VM, type EffectHandler, Continuation } from "./vm/vm.ts";
+import { VM, type EffectHandler } from "./vm/vm.ts";
 import {
   nullValue,
   booleanValue,
