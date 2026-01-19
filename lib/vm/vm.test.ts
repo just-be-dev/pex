@@ -10,7 +10,7 @@
  * - Complex programs
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { VM, VMError, throwingEffectHandler, type EffectHandler, Continuation } from "./vm.ts";
 import type { BytecodeFile, FunctionTemplate } from "../bytecode/format.ts";
 import { Opcode } from "../bytecode/opcodes.ts";
@@ -805,7 +805,7 @@ describe("VM - Algebraic Effects", () => {
     expect(capturedArgs).toEqual([stringValue("hello")]);
   });
 
-  it("should resume continuation with value", (done) => {
+  it("should resume continuation with value", (done: () => void) => {
     const effectHandler: EffectHandler = (name, args, continuation) => {
       // Resume with a different value
       continuation.resume(numberValue(42));
@@ -827,7 +827,7 @@ describe("VM - Algebraic Effects", () => {
     done();
   });
 
-  it("should continue execution after resume", (done) => {
+  it("should continue execution after resume", (done: () => void) => {
     const effectHandler: EffectHandler = (name, args, continuation) => {
       continuation.resume(numberValue(10));
     };
@@ -850,7 +850,7 @@ describe("VM - Algebraic Effects", () => {
     done();
   });
 
-  it("should enforce one-shot continuation", (done) => {
+  it("should enforce one-shot continuation", (done: () => void) => {
     let cont: Continuation | null = null;
 
     const effectHandler: EffectHandler = (name, args, continuation) => {
@@ -878,7 +878,7 @@ describe("VM - Algebraic Effects", () => {
     done();
   });
 
-  it("should handle multiple effects in sequence", (done) => {
+  it("should handle multiple effects in sequence", (done: () => void) => {
     let effectCount = 0;
 
     const effectHandler: EffectHandler = (name, args, continuation) => {
@@ -906,7 +906,7 @@ describe("VM - Algebraic Effects", () => {
     done();
   });
 
-  it("should handle effect in function call", (done) => {
+  it("should handle effect in function call", (done: () => void) => {
     const effectHandler: EffectHandler = (name, args, continuation) => {
       continuation.resume(numberValue(100));
     };

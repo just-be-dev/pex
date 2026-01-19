@@ -25,7 +25,7 @@
 import type { BytecodeFile, FunctionTemplate, Constant } from "../bytecode/format.ts";
 import { Opcode, OPCODE_METADATA, OperandType } from "../bytecode/opcodes.ts";
 import { ConstantType } from "../bytecode/format.ts";
-import type { Value, CallFrame, Upvalue } from "./values.ts";
+import type { Value, CallFrame, Upvalue, OpenUpvalue } from "./values.ts";
 import {
   nullValue,
   booleanValue,
@@ -724,7 +724,7 @@ export class VM {
       // ===================================================================
 
       default:
-        throw new VMError(`Unknown opcode: 0x${opcode.toString(16)}`, frame.ip);
+        throw new VMError(`Unknown opcode: 0x${(opcode as number).toString(16)}`, frame.ip);
     }
   }
 

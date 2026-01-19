@@ -683,7 +683,7 @@ describe("Bytecode Code Generation", () => {
         );
         const bytecode = generateBytecode(module);
         const code = Array.from(bytecode.codeSection.code);
-        expect(code).toContain(expectedOpcodes[i]);
+        expect(code).toContain(expectedOpcodes[i]!);
       }
     });
 
@@ -703,7 +703,7 @@ describe("Bytecode Code Generation", () => {
         );
         const bytecode = generateBytecode(module);
         const code = Array.from(bytecode.codeSection.code);
-        expect(code).toContain(expectedOpcodes[i]);
+        expect(code).toContain(expectedOpcodes[i]!);
       }
     });
   });

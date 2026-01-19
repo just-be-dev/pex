@@ -2,18 +2,13 @@
 
 /**
  * PEX CLI - Command-line interface for the PEX interpreter
- *
- * TODO: This CLI currently imports from the old interpreter which has been deleted.
- * It needs to be updated to use the VM compilation pipeline:
- * 1. parse(source) -> AST
- * 2. lowerProgram(ast) -> IRModule
- * 3. generateBytecode(irModule) -> BytecodeFile
- * 4. runVM(bytecode, input) -> Value
- *
- * See lib/ir/integration.test.ts for examples of this pipeline.
  */
 
-import { executeToJS, RuntimeError } from "./lib/interpreter/index.ts";
+import { parse } from "./lib/parser/index.ts";
+import { lowerProgram } from "./lib/ir/lower.ts";
+import { generateBytecode } from "./lib/codegen/bytecode.ts";
+import { VM, type EffectHandler } from "./lib/vm/index.ts";
+import { displayValue } from "./lib/vm/values.ts";
 import { readFileSync } from "fs";
 
 interface CLIOptions {
@@ -204,24 +199,32 @@ async function main() {
 
   // Execute
   try {
-    const result = executeToJS(source, {
-      shellMode: options.shellMode,
-      input,
-    });
+    // Parse
+    const ast = parse(source, { shellMode: options.shellMode });
+
+    // Lower to IR
+    const irModule = lowerProgram(ast);
+
+    // Generate bytecode
+    const bytecode = generateBytecode(irModule);
+
+    // Create effect handler (no-op for now)
+    const effectHandler: EffectHandler = (name, args, continuation) => {
+      console.error(`Unhandled effect: ${name}`);
+      process.exit(1);
+    };
+
+    // Run VM
+    const vm = new VM(bytecode, effectHandler);
+    const result = vm.run(input ?? null);
 
     // Output result
-    if (result !== null && result !== undefined) {
-      if (typeof result === "string") {
-        console.log(result);
-      } else {
-        console.log(JSON.stringify(result, null, 2));
-      }
+    const resultStr = displayValue(result);
+    if (resultStr !== "null") {
+      console.log(resultStr);
     }
   } catch (error: unknown) {
-    if (error instanceof RuntimeError) {
-      console.error(`Runtime Error: ${error.message}`);
-      process.exit(1);
-    } else if (error instanceof Error) {
+    if (error instanceof Error) {
       console.error(`Error: ${error.message}`);
       if (process.env.DEBUG) {
         console.error(error.stack);

@@ -5,7 +5,7 @@
  * Full end-to-end integration tests are in lib/integration.test.ts.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import * as vmApi from "./index.ts";
 
 describe("VM Public API - Exports", () => {
