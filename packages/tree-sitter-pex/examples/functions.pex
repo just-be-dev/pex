@@ -1,0 +1,13 @@
+;; Function definitions
+
+;; Define a doubling function
+fn: double (x) (* x 2)
+
+;; Use the function
+double 21
+
+;; Nested function calls
+(+ (* 2 3) 4)
+
+;; Pipeline with functions
+$$ | lower | trim | split " "

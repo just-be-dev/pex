@@ -14,4 +14,4 @@ jobs:
           experimental: true
 
       - name: Lint
-        run: mise run lint
+        run: mise //...:lint

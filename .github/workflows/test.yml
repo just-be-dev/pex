@@ -14,4 +14,4 @@ jobs:
           experimental: true
 
       - name: Run tests
-        run: mise run test
+        run: mise //...:test

@@ -1,0 +1,40 @@
+==================
+Unclosed Parenthesis
+==================
+
+(lower email
+
+---
+
+(program
+  (ERROR
+    (implicit_call
+      (atom (identifier))
+      (atom (identifier)))))
+
+==================
+Incomplete Pipeline
+==================
+
+a |
+
+---
+
+(program
+  (expression
+    (atom (identifier)))
+  (ERROR))
+
+==================
+Incomplete Effect
+==================
+
+(let: x)
+
+---
+
+(program
+  (expression
+    (list
+      (atom (effect_ident))
+      (atom (identifier)))))

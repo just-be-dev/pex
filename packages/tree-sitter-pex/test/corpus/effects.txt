@@ -1,0 +1,68 @@
+==================
+Variable Binding
+==================
+
+(let: x 10)
+
+---
+
+(program
+  (expression
+    (list
+      (atom (effect_ident))
+      (atom (identifier))
+      (atom (number)))))
+
+==================
+Function Definition
+==================
+
+(fn: double (x) (* x 2))
+
+---
+
+(program
+  (expression
+    (list
+      (atom (effect_ident))
+      (atom (identifier))
+      (list
+        (atom (identifier)))
+      (list
+        (atom (identifier))
+        (atom (identifier))
+        (atom (number))))))
+
+==================
+Print Effect
+==================
+
+(print: "hello")
+
+---
+
+(program
+  (expression
+    (list
+      (atom (effect_ident))
+      (atom (string)))))
+
+==================
+Multiple Effects
+==================
+
+(let: x 42);
+(print: x)
+
+---
+
+(program
+  (expression
+    (list
+      (atom (effect_ident))
+      (atom (identifier))
+      (atom (number))))
+  (expression
+    (list
+      (atom (effect_ident))
+      (atom (identifier)))))

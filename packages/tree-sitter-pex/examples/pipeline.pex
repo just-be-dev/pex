@@ -1,0 +1,13 @@
+;; Pipeline examples
+
+;; Simple pipeline
+"HELLO WORLD" | lower | trim
+
+;; Pipeline with source variables
+$$ | split " " | $0
+
+;; Complex pipeline
+$$ | lower | trim | split /\s+/ | join ","
+
+;; Pipeline with regex
+"foo  bar" | split /\s+/ | join "-"

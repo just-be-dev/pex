@@ -145,3 +145,29 @@ Once mise is installed, you can run the following command to setup the project:
 ```bash
 mise install
 ```
+
+### Monorepo Structure
+
+This project is organized as a monorepo with multiple packages:
+
+- **`packages/tree-sitter-pex/`** - Tree-sitter grammar for PEX language
+  - Provides syntax highlighting and parsing for editors
+  - See [packages/tree-sitter-pex/README.md](packages/tree-sitter-pex/README.md)
+
+### Running Tasks
+
+The project uses mise with monorepo support. You can run tasks using the `//` syntax:
+
+```bash
+# Run all tests across all packages
+mise run '//...:test'
+
+# Run tree-sitter grammar tests
+mise run //packages/tree-sitter-pex:test
+
+# Generate tree-sitter parser
+mise run //packages/tree-sitter-pex:generate
+
+# See all available tasks
+mise tasks
+```

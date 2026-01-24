@@ -1,0 +1,75 @@
+==================
+Simple Pipeline
+==================
+
+a | b
+
+---
+
+(program
+  (expression
+    (pipeline
+      (atom (identifier))
+      (atom (identifier)))))
+
+==================
+Multi-stage Pipeline
+==================
+
+a | b | c
+
+---
+
+(program
+  (expression
+    (pipeline
+      (atom (identifier))
+      (atom (identifier))
+      (atom (identifier)))))
+
+==================
+Pipeline with Source
+==================
+
+$$ | lower | trim
+
+---
+
+(program
+  (expression
+    (pipeline
+      (atom (source_ref))
+      (atom (identifier))
+      (atom (identifier)))))
+
+==================
+Pipeline with Lists
+==================
+
+(split " ") | $0 | lower
+
+---
+
+(program
+  (expression
+    (pipeline
+      (list
+        (atom (identifier))
+        (atom (string)))
+      (atom (source_ref))
+      (atom (identifier)))))
+
+==================
+Parenthesized Pipeline
+==================
+
+(a | b)
+
+---
+
+(program
+  (expression
+    (list
+      (pipeline
+        (atom (identifier))
+        (atom (identifier))))))
