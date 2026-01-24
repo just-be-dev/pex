@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PEX Playground - Pipe Expression Language</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header>
+    <h1>PEX Playground</h1>
+    <p>Pipe Expression Language - Interactive REPL</p>
+    <div class="header-links">
+      <a href="https://github.com/just-be/pex" target="_blank">GitHub</a>
+      <a href="https://github.com/just-be/pex#readme" target="_blank">Documentation</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Code Editor Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>PEX Code</h2>
+      </div>
+      <div class="panel-content">
+        <div id="editor"></div>
+      </div>
+      <div class="controls">
+        <select id="examples">
+          <option value="">Select an example...</option>
+        </select>
+        <button id="run-btn">
+          Run <span class="shortcut-hint">(Ctrl+Enter)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Input Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Input ($$)</h2>
+      </div>
+      <div class="panel-content">
+        <textarea id="input" placeholder="Enter input data as JSON or plain text...
+Examples:
+- 42
+- &quot;hello&quot;
+- [1, 2, 3]
+- {&quot;name&quot;: &quot;Alice&quot;}
+- null"></textarea>
+      </div>
+    </div>
+
+    <!-- Output Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Output</h2>
+      </div>
+      <div class="panel-content">
+        <div id="output">Ready. Click "Run" or press Ctrl+Enter to execute.</div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Built with <a href="https://codemirror.net/" target="_blank">CodeMirror</a> and
+    <a href="https://tree-sitter.github.io/" target="_blank">Tree-sitter</a>
+  </footer>
+
+  <script type="module" src="./app.ts"></script>
+</body>
+</html>

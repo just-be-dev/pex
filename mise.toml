@@ -3,6 +3,7 @@ experimental_monorepo_root = true
 [tools]
 bun = "1.3.6"
 lefthook = "2.0.15"
+wrangler = "4.60.0"
 
 [env]
 _.path = "node_modules/.bin"
@@ -29,6 +30,9 @@ run = "oxlint ."
 [tasks.check]
 description = "Run all checks (test, lint, typecheck)"
 depends = ["test", "lint", "typecheck"]
+
+[tasks.deploy]
+depends = ["//playground:deploy"]
 
 # Monorepo convenience tasks - use mise's built-in monorepo syntax:
 # mise //packages/tree-sitter-pex:generate
