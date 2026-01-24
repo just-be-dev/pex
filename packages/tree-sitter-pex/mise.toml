@@ -25,3 +25,7 @@ run = "tree-sitter parse"
 [tasks.prebuildify]
 description = "Prebuild native bindings for distribution"
 run = "prebuildify --napi --strip"
+
+[tasks."build-wasm"]
+description = "Build WASM parser for browser use"
+run = "tree-sitter build --wasm"

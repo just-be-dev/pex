@@ -1,0 +1,15 @@
+[tasks.dev]
+description = "Run playground in dev mode with hot reload"
+run = "bun install && bun --hot index.html"
+
+[tasks.build]
+description = "Build playground for production"
+run = "bun install && bun build index.html --outdir dist --minify"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "rm -rf dist node_modules"
+
+[tasks.deploy]
+description = "Build and deploy playground to Cloudflare Workers"
+run = "bun install && bun build index.html --outdir dist --minify && bunx wrangler deploy"

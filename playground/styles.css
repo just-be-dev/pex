@@ -1,0 +1,250 @@
+/**
+ * PEX Playground Styles
+ * Clean, modern styling with 3-panel grid layout
+ */
+
+:root {
+  --bg-primary: #f8f9fa;
+  --bg-panel: #ffffff;
+  --border-color: #dee2e6;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --accent: #0066cc;
+  --accent-hover: #0052a3;
+  --success: #28a745;
+  --error: #dc3545;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  --font-mono: 'SF Mono', 'Monaco', 'Cascadia Code', 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+header {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  padding: 1.5rem 2rem;
+}
+
+header h1 {
+  font-size: 1.75rem;
+  margin-bottom: 0.25rem;
+}
+
+header p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.header-links a {
+  color: var(--accent);
+  text-decoration: none;
+  margin-right: 1rem;
+  font-size: 0.9rem;
+}
+
+.header-links a:hover {
+  text-decoration: underline;
+}
+
+/* Main Grid */
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Panel Styling */
+.panel {
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel:last-child {
+  border-right: none;
+}
+
+.panel-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  background: #fafbfc;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.panel-header h2 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.panel-content {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+/* Code Editor */
+#editor {
+  height: 100%;
+  font-size: 14px;
+}
+
+.cm-editor {
+  height: 100%;
+}
+
+.cm-scroller {
+  font-family: var(--font-mono);
+}
+
+/* Controls */
+.controls {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border-color);
+  background: #fafbfc;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+select {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: white;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+button {
+  padding: 0.5rem 1.25rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+/* Input/Output Areas */
+textarea {
+  width: 100%;
+  height: 100%;
+  padding: 1rem;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  resize: none;
+  background: var(--bg-panel);
+}
+
+textarea:focus {
+  outline: none;
+}
+
+#output {
+  padding: 1rem;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+#output.success {
+  color: var(--success);
+}
+
+#output.error {
+  color: var(--error);
+}
+
+/* Footer */
+footer {
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-color);
+  padding: 0.75rem 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  main {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  main {
+    grid-template-columns: 1fr;
+    grid-template-rows: 2fr 1fr 1fr;
+  }
+
+  .panel {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .panel:last-child {
+    border-bottom: none;
+  }
+}
+
+/* Keyboard Shortcut Hint */
+.shortcut-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
