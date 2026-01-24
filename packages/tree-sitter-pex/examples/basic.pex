@@ -1,0 +1,17 @@
+;; Basic PEX examples
+
+;; Simple pipeline
+$$ | lower | trim
+
+;; Function call
+(+ 1 2)
+
+;; Implicit call
+lower "HELLO"
+
+;; Variable binding
+let: x 42
+
+;; Multiple expressions
+let: greeting "Hello"
+print: greeting

@@ -1,0 +1,104 @@
+==================
+Numbers
+==================
+
+42;
+3.14;
+-10;
+-0.5
+
+---
+
+(program
+  (expression
+    (atom (number)))
+  (expression
+    (atom (number)))
+  (expression
+    (atom (number)))
+  (expression
+    (atom (number))))
+
+==================
+Strings
+==================
+
+"hello";
+'world';
+"hello \"world\"";
+'it\'s nice'
+
+---
+
+(program
+  (expression
+    (atom (string)))
+  (expression
+    (atom (string)))
+  (expression
+    (atom (string (escape_sequence) (escape_sequence))))
+  (expression
+    (atom (string (escape_sequence)))))
+
+==================
+Booleans and Null
+==================
+
+true;
+false;
+null
+
+---
+
+(program
+  (expression
+    (atom (boolean)))
+  (expression
+    (atom (boolean)))
+  (expression
+    (atom (null))))
+
+==================
+Source Variables
+==================
+
+$$;
+$;
+$0;
+$1;
+$42
+
+---
+
+(program
+  (expression
+    (atom (source_ref)))
+  (expression
+    (atom (source_ref)))
+  (expression
+    (atom (source_ref)))
+  (expression
+    (atom (source_ref)))
+  (expression
+    (atom (source_ref))))
+
+==================
+Regex
+==================
+
+/pattern/;
+/\d+/;
+/hello/gi;
+/[a-z]+/i
+
+---
+
+(program
+  (expression
+    (atom (regex)))
+  (expression
+    (atom (regex)))
+  (expression
+    (atom (regex)))
+  (expression
+    (atom (regex))))

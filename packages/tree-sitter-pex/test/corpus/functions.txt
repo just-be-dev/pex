@@ -1,0 +1,90 @@
+==================
+Explicit Function Call
+==================
+
+(lower email)
+
+---
+
+(program
+  (expression
+    (list
+      (atom (identifier))
+      (atom (identifier)))))
+
+==================
+Implicit Function Call
+==================
+
+lower email
+
+---
+
+(program
+  (expression
+    (implicit_call
+      (atom (identifier))
+      (atom (identifier)))))
+
+==================
+Arithmetic Operators
+==================
+
+(+ 1 2);
+(* 3 4);
+(- 10 5);
+(/ 8 2)
+
+---
+
+(program
+  (expression
+    (list
+      (atom (identifier))
+      (atom (number))
+      (atom (number))))
+  (expression
+    (list
+      (atom (identifier))
+      (atom (number))
+      (atom (number))))
+  (expression
+    (list
+      (atom (identifier))
+      (atom (number))
+      (atom (number))))
+  (expression
+    (list
+      (atom (identifier))
+      (atom (number))
+      (atom (number)))))
+
+==================
+Nested Function Calls
+==================
+
+(+ (* 2 3) 4)
+
+---
+
+(program
+  (expression
+    (list
+      (atom (identifier))
+      (list
+        (atom (identifier))
+        (atom (number))
+        (atom (number)))
+      (atom (number)))))
+
+==================
+Empty List
+==================
+
+()
+
+---
+
+(program
+  (expression
+    (list)))

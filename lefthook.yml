@@ -2,11 +2,9 @@ pre-commit:
   parallel: true
   commands:
     lint:
-      glob: "*.{js,ts,jsx,tsx}"
-      run: oxlint --fix {staged_files}
-      stage_fixed: true
+      run: mise //...:lint
 
 pre-push:
   commands:
     typecheck:
-      run: mise run typecheck
+      run: mise //...:typecheck

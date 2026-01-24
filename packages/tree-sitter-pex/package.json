@@ -1,0 +1,45 @@
+{
+  "name": "@pex/tree-sitter-pex",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "grammar.js",
+    "queries/",
+    "src/",
+    "dist/"
+  ],
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "build": "tree-sitter generate && bun build src/index.ts --outdir dist",
+    "test": "tree-sitter test && bun test",
+    "test:corpus": "tree-sitter test",
+    "test:unit": "bun test",
+    "parse": "tree-sitter parse",
+    "install": "node-gyp-build",
+    "prebuildify": "prebuildify --napi --strip"
+  },
+  "dependencies": {
+    "tree-sitter": "^0.21.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "peerDependencies": {
+    "tree-sitter": "^0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "tree_sitter": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tree-sitter-cli": "^0.22.0",
+    "prebuildify": "^6.0.0"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.pex",
+      "injection-regex": "^pex$"
+    }
+  ]
+}

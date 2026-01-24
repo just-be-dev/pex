@@ -1,0 +1,27 @@
+[tasks.generate]
+description = "Generate Tree-sitter parser from grammar"
+run = "tree-sitter generate"
+
+[tasks.build]
+description = "Build Tree-sitter grammar package"
+run = "tree-sitter generate && bun build src/index.ts --outdir dist"
+
+[tasks.test]
+description = "Run all tests (corpus + TypeScript)"
+run = "tree-sitter test && bun test"
+
+[tasks."test:corpus"]
+description = "Run corpus tests only"
+run = "tree-sitter test"
+
+[tasks."test:unit"]
+description = "Run TypeScript unit tests only"
+run = "bun test"
+
+[tasks.parse]
+description = "Parse PEX files with Tree-sitter"
+run = "tree-sitter parse"
+
+[tasks.prebuildify]
+description = "Prebuild native bindings for distribution"
+run = "prebuildify --napi --strip"

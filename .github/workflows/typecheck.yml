@@ -14,4 +14,4 @@ jobs:
           experimental: true
 
       - name: Type check
-        run: mise run typecheck
+        run: mise //...:typecheck
