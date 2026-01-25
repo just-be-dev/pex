@@ -1,0 +1,26 @@
+{
+  "name": "@pex/core",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PEX language compiler and runtime",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./parser": "./src/parser/index.ts",
+    "./ir": "./src/ir/lower.ts",
+    "./codegen": "./src/codegen/bytecode.ts",
+    "./vm": "./src/vm/index.ts",
+    "./bytecode": "./src/bytecode/format.ts"
+  },
+  "files": ["src"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun x tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

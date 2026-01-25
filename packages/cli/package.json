@@ -1,0 +1,23 @@
+{
+  "name": "@pex/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PEX command-line interface",
+  "bin": {
+    "pex": "./src/cli.ts"
+  },
+  "files": ["src"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun x tsc --noEmit"
+  },
+  "dependencies": {
+    "@pex/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
