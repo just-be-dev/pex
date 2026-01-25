@@ -16,9 +16,11 @@ import {
   objectValue,
   booleanValue,
   type Value,
-} from "../lib/vm/index.ts";
-import { LexerError, ParseError } from "../lib/parser/index.ts";
-import { VMError, VMRuntimeError } from "../lib/vm/index.ts";
+  LexerError,
+  ParseError,
+  VMError,
+  VMRuntimeError,
+} from "@pex/core";
 
 // CodeMirror
 import { EditorView, keymap } from "@codemirror/view";

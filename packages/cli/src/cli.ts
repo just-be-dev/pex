@@ -4,11 +4,14 @@
  * PEX CLI - Command-line interface for the PEX interpreter
  */
 
-import { parse } from "./lib/parser/index.ts";
-import { lowerProgram } from "./lib/ir/lower.ts";
-import { generateBytecode } from "./lib/codegen/bytecode.ts";
-import { VM, type EffectHandler } from "./lib/vm/index.ts";
-import { displayValue } from "./lib/vm/values.ts";
+import {
+  parse,
+  lowerProgram,
+  generateBytecode,
+  VM,
+  type EffectHandler,
+  displayValue,
+} from "@pex/core";
 import { readFileSync } from "fs";
 
 interface CLIOptions {

@@ -14,6 +14,13 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
 
+    // Path mappings for workspace packages
+    "paths": {
+      "@pex/core": ["./packages/core/src"],
+      "@pex/core/*": ["./packages/core/src/*"],
+      "@pex/cli": ["./packages/cli/src"]
+    },
+
     // Best practices
     "strict": true,
     "skipLibCheck": true,
@@ -26,6 +33,6 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "exclude": ["node_modules", "**/*.test.ts", "playground"]
+  "exclude": ["node_modules", "**/*.test.ts", "playground", "packages/playground"]
 }
 

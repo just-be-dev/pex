@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
+    "@pex/core": "workspace:*",
     "@codemirror/state": "^6.4.0",
     "@codemirror/view": "^6.24.0",
     "@codemirror/language": "^6.10.0",
