@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/just-be-dev/just-be.dev/refs/heads/main/packages/deploy/schema.json",
+  "rules": [{
+    "subdomain": "pex",
+    "type": "static",
+    "dir": "./dist",
+    "spa": true
+  }]
+}
