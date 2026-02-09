@@ -21,7 +21,7 @@ PEX offers a pipeline syntax for cleaner composition.
 The previous example can be rewritten as:
 
 ```lisp
-$$ | trim | lower
+$$ | lower | trim
 ```
 
 Effectively the pipeline operator turns `x | y` into the s-expression `(y x)`. It's important to note that the pipeline operator inserts the input value as the first argument to the function on the right side of the pipeline.
